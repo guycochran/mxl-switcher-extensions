@@ -28,5 +28,21 @@ The next gate must first publish a stable Program Audio flow, then perform cuts
 while recording and measure output duration, cadence, audio samples, A/V skew,
 drops, CPU, RSS, disk rate, and finalization time.
 
+## Follow-up with candidate Program Audio
+
+A subsequent smoke paired stable Program Video with a newly published stable
+48 kHz Program Audio candidate. Four AFV cuts completed while recording. The
+recorder finalized a seekable Matroska file containing 1920x1080 progressive
+30 fps H.264 and two-channel 48 kHz AAC; the file was approximately 19 MB with
+20.455 seconds of media.
+
+A separate concurrent probe showed zero Program Audio timestamp
+discontinuities, and direct A/V readers measured timestamp proximity within one
+30 fps frame. The supervisor ran for 30.4 seconds, so recorder startup/preroll
+still needs to be separated from requested media duration. Drops, encoded-file
+A/V skew, and content-level lip sync remain unmeasured. Recovered Core video
+unavailability events during the repeated cuts also require analysis before a
+clean acceptance claim.
+
 No participant identity, face, meeting credential, private address, flow UUID,
 host name, or raw operational log is included in this record.
