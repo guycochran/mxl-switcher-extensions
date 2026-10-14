@@ -53,9 +53,11 @@ See [extension contract](docs/EXTENSION_CONTRACT.md) and
 ## Current starting point
 
 This repository begins as a clean extraction boundary. The original MXL
-Switcher proved SRT/RTMP egress and an MXL-to-TAMS live-recording workflow. The
-new packages preserve those lessons while replacing regenerated timestamps and
-implicit flow naming with the clock-correct Program Master and explicit
-manifests from MXL Switcher Core.
+Switcher proved that Program segments could be recorded and registered in a
+TAMS store. It did **not** produce an accepted playback, scrubbing, trimming,
+or replay workflow; those areas consumed substantial development time and
+remain research. The new packages preserve the recording lessons while
+replacing regenerated timestamps and implicit flow naming with the
+clock-correct Program Master and explicit manifests from MXL Switcher Core.
 
 License: MIT.

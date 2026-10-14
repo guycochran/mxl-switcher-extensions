@@ -11,7 +11,8 @@
     "recording/tams"
   ],
   "notes": [
-    "The initial gate records Program only; ISO recording follows as configuration.",
+    "The initial gate records Program only; playback, trim/export, and replay have separate later gates.",
+    "The original prototype did not establish dependable playback or trimming.",
     "TAMS service and object storage are independently deployed."
   ]
 }

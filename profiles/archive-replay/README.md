@@ -12,7 +12,9 @@ Adds recording to an existing Core deployment without changing Core.
 - Skin and Companion record/replay controls
 - recorder health on the EIC dashboard
 
-The first accepted gate will cover Program recording and replay. ISO recording
-becomes a manifest selection after that path is stable.
+The first accepted gate covers Program recording only. Playback is a second
+gate, trimming/export a third, and MXL replay a fourth. A failure in one later
+stage does not invalidate or delay the recorder. ISO recording becomes a
+manifest selection only after the Program recorder is stable.
 
 **Status:** profile definition; TAMS extraction is prototype maturity.

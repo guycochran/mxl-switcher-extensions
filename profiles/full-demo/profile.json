@@ -19,6 +19,7 @@
   ],
   "notes": [
     "This integration profile is not the recommended starting point for every user.",
+    "TAMS playback, trim/export, and replay are targets, not validated capabilities.",
     "Pin only candidate or accepted packages before publishing a reproducible demo."
   ]
 }

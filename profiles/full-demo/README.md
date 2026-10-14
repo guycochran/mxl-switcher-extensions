@@ -3,7 +3,8 @@
 The integration profile used to demonstrate modularity, not the recommended
 starting point for every user.
 
-Target sequence:
+Long-term target sequence, contingent on each component reaching candidate
+status:
 
 1. Remote/native MXL sources enter Core.
 2. Operator cuts direct shots and 2-up through 8-up layouts.
@@ -15,4 +16,5 @@ Target sequence:
    other destination.
 
 **Status:** profile definition. It must pin only candidate or accepted packages
-before being advertised as reproducible.
+before being advertised as reproducible. TAMS playback, trimming, and replay
+are not currently demo-ready.
