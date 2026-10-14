@@ -44,5 +44,26 @@ A/V skew, and content-level lip sync remain unmeasured. Recovered Core video
 unavailability events during the repeated cuts also require analysis before a
 clean acceptance claim.
 
+## Real-time CPU profile follow-up
+
+The original encoder unintentionally produced H.264 High 4:4:4 directly from
+v210 and could not maintain real time on the loaded CPU-only host. The revised
+profile explicitly converts to I420, uses the x264 ultrafast low-latency
+profile, and parallelizes conversion and encoding. A 20.12-second capture then
+produced 20.40 seconds of seekable 1920x1080p30 H.264 plus 48 kHz stereo AAC.
+
+The recorder sampled at approximately 166% CPU and 95 MiB RSS. The host exposed
+no VA-API, QSV, or NVENC device. Confining the recorder to four selected CPUs
+with low cgroup scheduling weight preserved real-time output: 20.12 seconds of
+capture produced 20.28 seconds of media. It reduced recovered Core alarm events
+from three in an unconstrained sample to one, but did not eliminate them. No
+alarm remained active and all hard Core read/timing counters stayed zero.
+
+A no-recorder direct-cut control advanced every source and added zero alarm
+events. The remaining event is therefore a co-location/isolation issue under
+encode load, not a direct-cut correctness failure. This recorder stays at
+prototype maturity; production should use a separately sized output node or a
+hardware encoder unless a longer isolated gate passes cleanly.
+
 No participant identity, face, meeting credential, private address, flow UUID,
 host name, or raw operational log is included in this record.

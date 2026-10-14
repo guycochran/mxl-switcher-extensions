@@ -23,6 +23,16 @@ from typing import Any
 
 
 QUEUE_NS = 2_000_000_000
+MEDIA_START_BYTES = 4096
+
+
+def media_file_started(path: pathlib.Path | None) -> bool:
+    if path is None:
+        return False
+    try:
+        return path.stat().st_size >= MEDIA_START_BYTES
+    except OSError:
+        return False
 
 
 def gst_command(
@@ -43,9 +53,11 @@ def gst_command(
         "automatic-eos=false", "!",
         "queue", f"max-size-time={QUEUE_NS}", "max-size-buffers=0",
         "max-size-bytes=0", "!",
-        "videoconvert", "!",
-        "x264enc", "tune=zerolatency", "speed-preset=veryfast",
-        f"bitrate={video_bitrate_kbps}", "key-int-max=60", "bframes=0", "!",
+        "videoconvert", "n-threads=4", "!", "video/x-raw,format=I420", "!",
+        "queue", "max-size-buffers=4", "max-size-bytes=0", "max-size-time=0", "!",
+        "x264enc", "tune=zerolatency", "speed-preset=ultrafast",
+        "threads=8", "sliced-threads=true", f"bitrate={video_bitrate_kbps}",
+        "key-int-max=60", "bframes=0", "!",
         "h264parse", "!", "queue", "!", "mux.video_0",
         "mxlsrc", f"domain={domain}", f"audio-flow-id={audio_flow}",
         "automatic-eos=false", "!",
@@ -74,6 +86,9 @@ class Recorder:
         self.stop_requested = False
         self.shutdown_requested = False
         self.last_wall_duration_seconds = 0.0
+        self.media_started_monotonic: float | None = None
+        self.last_capture_wall_seconds = 0.0
+        self.failure_requested = False
 
     def _recording_paths(self) -> tuple[pathlib.Path, pathlib.Path]:
         stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
@@ -99,6 +114,9 @@ class Recorder:
             self.last_error = None
             self.stop_requested = False
             self.last_wall_duration_seconds = 0.0
+            self.media_started_monotonic = None
+            self.last_capture_wall_seconds = 0.0
+            self.failure_requested = False
             try:
                 self.process = subprocess.Popen(
                     command,
@@ -139,11 +157,16 @@ class Recorder:
                 self.last_wall_duration_seconds = max(
                     0.0, time.monotonic() - self.started_monotonic
                 )
+            if self.media_started_monotonic is not None:
+                self.last_capture_wall_seconds = max(
+                    0.0, time.monotonic() - self.media_started_monotonic
+                )
             # gst-launch handles SIGINT by sending EOS when invoked with -e,
             # then retains the signal return code (-SIGINT) even though the
             # muxer closed the file cleanly.
             clean = (
                 self.stop_requested
+                and not self.failure_requested
                 and process.returncode in {0, -signal.SIGINT}
                 and self.partial_path is not None
                 and self.partial_path.is_file()
@@ -161,7 +184,10 @@ class Recorder:
             else:
                 self.finalization_state = "failed"
                 self.state = "failed"
-                self.last_error = stderr.strip() or f"recorder exited {process.returncode}"
+                if not self.last_error:
+                    self.last_error = (
+                        stderr.strip() or f"recorder exited {process.returncode}"
+                    )
             self.revision += 1
 
     def enforce_duration(self) -> None:
@@ -169,8 +195,46 @@ class Recorder:
             time.sleep(0.25)
             with self.lock:
                 running = self.process is not None and self.process.poll() is None
-                elapsed = 0.0 if self.started_monotonic is None else time.monotonic() - self.started_monotonic
-            if running and self.args.max_duration_seconds > 0 and elapsed >= self.args.max_duration_seconds:
+                now = time.monotonic()
+                launch_elapsed = (
+                    0.0
+                    if self.started_monotonic is None
+                    else now - self.started_monotonic
+                )
+                if (
+                    running
+                    and self.media_started_monotonic is None
+                    and media_file_started(self.partial_path)
+                ):
+                    self.media_started_monotonic = now
+                    self.revision += 1
+                capture_elapsed = (
+                    0.0
+                    if self.media_started_monotonic is None
+                    else now - self.media_started_monotonic
+                )
+                startup_timed_out = (
+                    running
+                    and self.media_started_monotonic is None
+                    and launch_elapsed >= self.args.startup_timeout_seconds
+                )
+                if startup_timed_out:
+                    self.failure_requested = True
+                    self.state = "failed"
+                    self.finalization_state = "failed"
+                    self.last_error = (
+                        "no media reached the recorder within "
+                        f"{self.args.startup_timeout_seconds}s"
+                    )
+                    assert self.process is not None
+                    os.killpg(self.process.pid, signal.SIGTERM)
+                    self.revision += 1
+            if (
+                running
+                and self.media_started_monotonic is not None
+                and self.args.max_duration_seconds > 0
+                and capture_elapsed >= self.args.max_duration_seconds
+            ):
                 try:
                     self.stop()
                 except RuntimeError:
@@ -183,6 +247,11 @@ class Recorder:
                 0.0
                 if self.started_monotonic is None
                 else max(0.0, time.monotonic() - self.started_monotonic)
+            )
+            capture_elapsed = (
+                0.0
+                if self.media_started_monotonic is None
+                else max(0.0, time.monotonic() - self.media_started_monotonic)
             )
             path = self.partial_path if running else self.final_path
             size = 0
@@ -205,12 +274,18 @@ class Recorder:
                     "wall_duration_seconds": round(
                         elapsed if running else self.last_wall_duration_seconds, 3
                     ),
+                    "capture_wall_seconds": round(
+                        capture_elapsed if running else self.last_capture_wall_seconds,
+                        3,
+                    ),
                     "media_duration_seconds": None,
                     "bytes": size,
                     "disk_free_bytes": disk.free,
                     "finalization": self.finalization_state,
                     "file": None if path is None else path.name,
                     "queue_bound_ns": QUEUE_NS,
+                    "video_convert_threads": 4,
+                    "video_encode_threads": 8,
                     "audio_rate_hz": 48000,
                     "av_skew_ns": None,
                     "drops": None,
@@ -268,6 +343,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--video-bitrate-kbps", type=int, default=12000)
     parser.add_argument("--audio-bitrate-bps", type=int, default=192000)
     parser.add_argument("--max-duration-seconds", type=int, default=3600)
+    parser.add_argument("--startup-timeout-seconds", type=int, default=30)
     parser.add_argument("--autostart", action="store_true")
     return parser.parse_args()
 

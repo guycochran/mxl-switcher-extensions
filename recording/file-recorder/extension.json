@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "program-file-recorder",
-  "version": "0.1.0-prototype",
+  "version": "0.2.0-prototype",
   "kind": "recorder",
   "maturity": "prototype",
   "requires_core_api": "^1.0",

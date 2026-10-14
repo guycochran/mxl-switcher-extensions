@@ -31,6 +31,11 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("audio/x-raw,rate=48000,channels=2", command)
         self.assertIn("matroskamux", command)
         self.assertIn("location=/recordings/program.partial.mkv", command)
+        self.assertIn("video/x-raw,format=I420", command)
+        self.assertIn("speed-preset=ultrafast", command)
+        self.assertIn("n-threads=4", command)
+        self.assertIn("threads=8", command)
+        self.assertIn("sliced-threads=true", command)
         self.assertNotIn("sh", command)
 
     def test_video_and_audio_encoder_settings_are_explicit(self):
@@ -41,6 +46,15 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("bitrate=128000", command)
         self.assertIn("key-int-max=60", command)
         self.assertIn("bframes=0", command)
+
+    def test_media_start_requires_a_nontrivial_output_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "show.partial.mkv"
+            self.assertFalse(file_recorder.media_file_started(path))
+            path.write_bytes(b"header")
+            self.assertFalse(file_recorder.media_file_started(path))
+            path.write_bytes(b"x" * file_recorder.MEDIA_START_BYTES)
+            self.assertTrue(file_recorder.media_file_started(path))
 
 
 class FinalizationTests(unittest.TestCase):
