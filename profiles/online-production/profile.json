@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "name": "online-production",
+  "audience": "Remote meetings, webinars, virtual events, and cloud production",
+  "core": {
+    "repository": "https://github.com/guycochran/mxl-switcher-core",
+    "ref": "main"
+  },
+  "extensions": [
+    "inputs/zoomiso",
+    "inputs/srt",
+    "outputs/meeting-return",
+    "outputs/webrtc",
+    "outputs/srt",
+    "outputs/rtmp"
+  ],
+  "notes": [
+    "ZoomISO is licensed and configured separately.",
+    "Streaming secrets are external references and are never committed."
+  ]
+}

@@ -1,0 +1,61 @@
+# MXL Switcher Extensions
+
+Optional input, output, recording, and deployment integrations for
+[`mxl-switcher-core`](https://github.com/guycochran/mxl-switcher-core).
+
+Core is useful without this repository. Install only the bolt-ons your workflow
+requires.
+
+## Choose a workflow
+
+| Workflow | Profile | Typical components |
+|---|---|---|
+| Corporate/on-prem | [`profiles/corporate-on-prem`](profiles/corporate-on-prem) | SDI/HDMI, NDI, SRT, presentations, Companion |
+| Online production | [`profiles/online-production`](profiles/online-production) | ZoomISO, meeting return, WebRTC, SRT, RTMPS |
+| Recording/replay | [`profiles/archive-replay`](profiles/archive-replay) | File recording, TAMS, scrub, clips, replay |
+| Complete demonstration | [`profiles/full-demo`](profiles/full-demo) | All validated demo components |
+| Core developer | [`profiles/core-only`](profiles/core-only) | Core and diagnostic control only |
+
+## Repository map
+
+```text
+common/                 shared lifecycle, health, and manifest conventions
+inputs/                 transport or device -> stable MXL flow
+outputs/                stable MXL Program Master -> destination
+recording/              file and time-addressable recording/replay
+profiles/               audience-specific deployment selections
+schemas/                machine-readable extension contracts
+docs/                   architecture and contribution guidance
+```
+
+## Maturity labels
+
+Every package README and manifest uses one of these labels:
+
+- `concept` — contract and intended behavior only;
+- `prototype` — demonstrated code exists but is not packaged or accepted;
+- `candidate` — installable and under staged acceptance;
+- `accepted` — its documented profile passed the published acceptance gate.
+
+An empty package directory does not claim implementation. Proprietary SDKs,
+licensed applications, credentials, and hardware drivers are never vendored.
+
+## Architectural rule
+
+Extensions are processes beside Core, never plugins inside its media hot path.
+They communicate through stable MXL flows and bounded control/health contracts.
+Stopping, restarting, or failing one extension must not interrupt Core or
+another extension.
+
+See [extension contract](docs/EXTENSION_CONTRACT.md) and
+[Core's output-node architecture](https://github.com/guycochran/mxl-switcher-core/blob/main/docs/OUTPUT_ARCHITECTURE.md).
+
+## Current starting point
+
+This repository begins as a clean extraction boundary. The original MXL
+Switcher proved SRT/RTMP egress and an MXL-to-TAMS live-recording workflow. The
+new packages preserve those lessons while replacing regenerated timestamps and
+implicit flow naming with the clock-correct Program Master and explicit
+manifests from MXL Switcher Core.
+
+License: MIT.

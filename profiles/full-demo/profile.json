@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "name": "full-demo",
+  "audience": "Demonstration of modular live production, distribution, and replay",
+  "core": {
+    "repository": "https://github.com/guycochran/mxl-switcher-core",
+    "ref": "main"
+  },
+  "extensions": [
+    "inputs/zoomiso",
+    "inputs/srt",
+    "inputs/ndi",
+    "outputs/meeting-return",
+    "outputs/webrtc",
+    "outputs/ndi",
+    "outputs/srt",
+    "outputs/rtmp",
+    "recording/tams"
+  ],
+  "notes": [
+    "This integration profile is not the recommended starting point for every user.",
+    "Pin only candidate or accepted packages before publishing a reproducible demo."
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mxl-switcher:extension:v1",
+  "title": "MXL Switcher extension manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "version",
+    "kind",
+    "maturity",
+    "requires_core_api",
+    "capabilities",
+    "flow_roles"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+    "kind": {
+      "enum": ["input", "output", "recorder", "playout", "operator_surface"]
+    },
+    "maturity": {"enum": ["concept", "prototype", "candidate", "accepted"]},
+    "requires_core_api": {"type": "string", "minLength": 1},
+    "entrypoint": {"type": ["string", "null"]},
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"}
+    },
+    "flow_roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reads", "publishes"],
+      "properties": {
+        "reads": {"type": "array", "items": {"type": "string"}},
+        "publishes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "external_dependencies": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "secret_refs": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"}
+    }
+  }
+}

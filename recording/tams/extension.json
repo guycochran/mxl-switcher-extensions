@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "name": "tams-recorder",
+  "version": "0.1.0-prototype",
+  "kind": "recorder",
+  "maturity": "prototype",
+  "requires_core_api": "^1.0",
+  "entrypoint": null,
+  "capabilities": [
+    "program.video.read",
+    "program.audio.read",
+    "record.timerange",
+    "health.publish"
+  ],
+  "flow_roles": {
+    "reads": ["program.video", "program.audio"],
+    "publishes": []
+  },
+  "external_dependencies": ["TAMS API service", "S3-compatible object storage"],
+  "secret_refs": ["tams-api-token", "tams-object-store-credentials"]
+}

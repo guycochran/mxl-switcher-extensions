@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "name": "corporate-on-prem",
+  "audience": "Corporate events, studios, campuses, and production trucks",
+  "core": {
+    "repository": "https://github.com/guycochran/mxl-switcher-core",
+    "ref": "main"
+  },
+  "extensions": [
+    "inputs/srt",
+    "inputs/rtsp",
+    "inputs/ndi",
+    "outputs/ndi",
+    "outputs/decklink",
+    "recording/file-recorder"
+  ],
+  "notes": [
+    "NDI and DeckLink dependencies are installed separately.",
+    "Pin candidate or accepted package versions before advertising reproducibility."
+  ]
+}

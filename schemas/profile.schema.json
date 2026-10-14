@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mxl-switcher:deployment-profile:v1",
+  "title": "MXL Switcher deployment profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "name", "audience", "core", "extensions"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "audience": {"type": "string", "minLength": 1},
+    "core": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "ref"],
+      "properties": {
+        "repository": {"type": "string", "format": "uri"},
+        "ref": {"type": "string", "minLength": 1}
+      }
+    },
+    "extensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9/_-]+$"}
+    },
+    "notes": {"type": "array", "items": {"type": "string"}}
+  }
+}

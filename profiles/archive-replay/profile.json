@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "name": "archive-replay",
+  "audience": "Productions requiring recording, clipping, and replay",
+  "core": {
+    "repository": "https://github.com/guycochran/mxl-switcher-core",
+    "ref": "main"
+  },
+  "extensions": [
+    "recording/file-recorder",
+    "recording/tams"
+  ],
+  "notes": [
+    "The initial gate records Program only; ISO recording follows as configuration.",
+    "TAMS service and object storage are independently deployed."
+  ]
+}

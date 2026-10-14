@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "name": "core-only",
+  "audience": "Core, automation, and custom-interface developers",
+  "core": {
+    "repository": "https://github.com/guycochran/mxl-switcher-core",
+    "ref": "main"
+  },
+  "extensions": [],
+  "notes": ["Pin a released Core tag before production deployment."]
+}
