@@ -60,4 +60,10 @@ remain research. The new packages preserve the recording lessons while
 replacing regenerated timestamps and implicit flow naming with the
 clock-correct Program Master and explicit manifests from MXL Switcher Core.
 
+The conventional [file recorder](recording/file-recorder) is now a prototype:
+its supervised, bounded pipeline has passed a short isolated A/V mux and
+finalization smoke. It remains below candidate maturity until stable switched
+Program Audio, measured A/V skew/drop telemetry, and staged duration gates are
+complete.
+
 License: MIT.

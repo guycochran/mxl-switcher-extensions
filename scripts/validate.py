@@ -38,6 +38,12 @@ def extension(path: pathlib.Path) -> None:
     roles = item.get("flow_roles", {})
     require(isinstance(roles.get("reads"), list), f"{path}: flow_roles.reads")
     require(isinstance(roles.get("publishes"), list), f"{path}: flow_roles.publishes")
+    entrypoint = item.get("entrypoint")
+    if entrypoint is not None:
+        require(
+            (path.parent / entrypoint).is_file(),
+            f"{path}: missing entrypoint {entrypoint}",
+        )
 
 
 def profile(path: pathlib.Path) -> None:

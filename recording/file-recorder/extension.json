@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "name": "program-file-recorder",
+  "version": "0.1.0-prototype",
+  "kind": "recorder",
+  "maturity": "prototype",
+  "requires_core_api": "^1.0",
+  "entrypoint": "recorder.py",
+  "capabilities": [
+    "program.video.read",
+    "program.audio.read",
+    "record.file",
+    "record.finalize",
+    "health.publish"
+  ],
+  "flow_roles": {
+    "reads": ["program.video", "program.audio"],
+    "publishes": []
+  },
+  "external_dependencies": [
+    "GStreamer 1.24+",
+    "gst-mxl-rs mxlsrc",
+    "x264enc",
+    "avenc_aac",
+    "matroskamux"
+  ],
+  "secret_refs": []
+}
