@@ -203,6 +203,47 @@ class OnlineDemoTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             demo.load_config(self.config_file)
 
+    def test_acceptance_evaluator_passes_a_clean_advancing_demo(self):
+        source = {"torn": 0, "missing": 0, "live": True}
+        before = {
+            "containers": {suffix: "running|0|test-demo" for suffix in demo.OWNED_SUFFIXES},
+            "core": {**{key: 0 for key in demo.HARD_COUNTERS}, "status": "running", "routed": 100},
+            "youtube": {"source_count": 4, "audio_ready": True, "running": False},
+            "confidence": {
+                suffix: {"frames": 10, "encoder_restarts": 0, "sources": {"one": source}}
+                for suffix in ("program-confidence", "preview-confidence", "multiview-confidence")
+            },
+        }
+        after = json.loads(json.dumps(before))
+        after["core"]["routed"] = 200
+        for item in after["confidence"].values():
+            item["frames"] = 20
+        result = demo.evaluate_acceptance(before, after, 4)
+        self.assertTrue(result["passed"])
+        self.assertTrue(result["checks"]["core_hard_counters_zero"])
+
+    def test_acceptance_evaluator_fails_counter_motion_and_terminal_torn(self):
+        source = {"torn": 0, "missing": 0, "live": True}
+        before = {
+            "containers": {suffix: "running|0|test-demo" for suffix in demo.OWNED_SUFFIXES},
+            "core": {**{key: 0 for key in demo.HARD_COUNTERS}, "status": "running", "routed": 100},
+            "youtube": {"source_count": 4, "audio_ready": True, "running": True,
+                        "output": {"ready": True}},
+            "confidence": {
+                suffix: {"frames": 10, "encoder_restarts": 0, "sources": {"one": source}}
+                for suffix in ("program-confidence", "preview-confidence", "multiview-confidence")
+            },
+        }
+        after = json.loads(json.dumps(before))
+        after["core"]["routed"] = 200
+        after["core"]["too_late"] = 1
+        for item in after["confidence"].values():
+            item["frames"] = 20
+        after["confidence"]["multiview-confidence"]["sources"]["one"]["torn"] = 1
+        result = demo.evaluate_acceptance(before, after, 4)
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["hard_counter_deltas"]["too_late"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

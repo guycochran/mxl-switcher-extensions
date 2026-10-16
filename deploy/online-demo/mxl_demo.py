@@ -30,6 +30,12 @@ OWNED_SUFFIXES = (
 # Every container this launcher creates carries this label. Names alone are not
 # proof of ownership: an unrelated service may already use the same prefix.
 OWNER_LABEL = "io.github.guycochran.mxl-online-demo.deployment"
+HARD_COUNTERS = (
+    "invalid", "too_early", "too_late", "timeouts", "reader_reopens",
+    "sync_timeouts", "sync_too_early", "sync_too_late", "no_common_window",
+    "selected_input_regressions", "sustained_unavailable_alarms",
+    "sustained_unavailable_active",
+)
 
 
 def read_json(path: pathlib.Path) -> dict:
@@ -487,6 +493,115 @@ def status(cfg: dict) -> int:
     return 1 if failures else 0
 
 
+def url_json(url: str) -> dict:
+    with urllib.request.urlopen(url, timeout=3) as response:
+        value = json.load(response)
+    if not isinstance(value, dict):
+        raise RuntimeError(f"endpoint did not return a JSON object: {url}")
+    return value
+
+
+def latest_container_stats(cfg: dict, suffix: str) -> dict:
+    name = container_name(cfg, suffix)
+    proc = subprocess.run(docker(cfg, "logs", name), check=True, text=True,
+                          capture_output=True)
+    latest = None
+    for line in (proc.stdout + "\n" + proc.stderr).splitlines():
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict) and value.get("event") == "stats":
+            latest = value
+    if latest is None:
+        raise RuntimeError(f"no confidence stats found for {name}")
+    return latest
+
+
+def acceptance_snapshot(cfg: dict) -> dict:
+    containers = {}
+    for suffix in OWNED_SUFFIXES:
+        name = container_name(cfg, suffix)
+        proc = subprocess.run(
+            docker(cfg, "inspect", "-f",
+                   f'{{{{.State.Status}}}}|{{{{.RestartCount}}}}|{{{{index .Config.Labels "{OWNER_LABEL}"}}}}',
+                   name), text=True, capture_output=True,
+        )
+        containers[suffix] = proc.stdout.strip() if proc.returncode == 0 else "missing"
+    confidence = {
+        suffix: latest_container_stats(cfg, suffix)
+        for suffix in ("program-confidence", "preview-confidence", "multiview-confidence")
+    }
+    return {
+        "captured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "containers": containers,
+        "core": url_json(f"http://127.0.0.1:{cfg['core_port']}/api/mxl/v1/health"),
+        "youtube": url_json(f"http://127.0.0.1:{cfg['youtube_port']}/api/state"),
+        "confidence": confidence,
+    }
+
+
+def evaluate_acceptance(before: dict, after: dict, source_count: int,
+                        deployment_id: str | None = None) -> dict:
+    checks = {}
+    expected_container = lambda value: value.split("|")[:2] == ["running", "0"]
+    # The ownership label is deliberately included in the snapshot and must be non-empty.
+    checks["containers_running_zero_restarts_owned"] = all(
+        expected_container(value) and len(value.split("|")) == 3 and
+        value.split("|")[2] not in ("", "<no value>") and
+        (deployment_id is None or value.split("|")[2] == deployment_id)
+        for value in after["containers"].values()
+    )
+    checks["core_running"] = after["core"].get("status") == "running"
+    checks["core_routed_progress"] = int(after["core"].get("routed", 0)) > int(before["core"].get("routed", 0))
+    deltas = {
+        key: int(after["core"].get(key, 0)) - int(before["core"].get(key, 0))
+        for key in HARD_COUNTERS
+    }
+    checks["core_hard_counters_unchanged"] = all(value == 0 for value in deltas.values())
+    checks["core_hard_counters_zero"] = all(int(after["core"].get(key, 0)) == 0 for key in HARD_COUNTERS)
+    confidence = {}
+    for suffix, final in after["confidence"].items():
+        first = before["confidence"][suffix]
+        sources = final.get("sources", {})
+        confidence[suffix] = {
+            "frames_progress": int(final.get("frames", 0)) > int(first.get("frames", 0)),
+            "encoder_restarts_zero": int(final.get("encoder_restarts", 0)) == 0,
+            "terminal_torn_zero": all(int(row.get("torn", 0)) == 0 for row in sources.values()),
+            "missing_zero": all(int(row.get("missing", 0)) == 0 for row in sources.values()),
+            "all_sources_live": bool(sources) and all(bool(row.get("live")) for row in sources.values()),
+        }
+    checks["confidence"] = confidence
+    youtube = after["youtube"]
+    checks["youtube_sources_ready"] = int(youtube.get("source_count", 0)) >= source_count
+    checks["youtube_audio_ready"] = bool(youtube.get("audio_ready"))
+    output = youtube.get("output") or {}
+    checks["youtube_output_ok"] = not youtube.get("running") or bool(output.get("ready"))
+    flat = [value for key, value in checks.items() if key != "confidence"]
+    flat.extend(value for group in confidence.values() for value in group.values())
+    return {"passed": all(flat), "checks": checks, "hard_counter_deltas": deltas}
+
+
+def acceptance(cfg: dict, seconds: float) -> int:
+    if seconds <= 0:
+        raise ValueError("acceptance duration must be positive")
+    before = acceptance_snapshot(cfg)
+    print(f"Observing the running demo for {seconds:g} seconds...")
+    time.sleep(seconds)
+    after = acceptance_snapshot(cfg)
+    report = {
+        "schema": "mxl-online-demo-acceptance-v1", "duration_s": seconds,
+        **evaluate_acceptance(before, after, cfg["source_count"], cfg["deployment_id"]),
+        "before": before, "after": after,
+    }
+    target = pathlib.Path(cfg["state_dir"]) / "acceptance-latest.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=2))
+    print(f"{'PASS' if report['passed'] else 'FAIL'} acceptance report: {target}")
+    return 0 if report["passed"] else 1
+
+
 def stop(cfg: dict, apply: bool) -> None:
     if not apply:
         raise RuntimeError("stop removes the demo containers and requires --apply")
@@ -509,9 +624,11 @@ def stop(cfg: dict, apply: bool) -> None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("doctor", "prepare", "plan", "bootstrap", "launch", "status", "stop"))
+    parser.add_argument("command", choices=("doctor", "prepare", "plan", "bootstrap", "launch", "status", "acceptance", "stop"))
     parser.add_argument("--config", type=pathlib.Path, required=True)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--seconds", type=float, default=30.0,
+                        help="observation window for the acceptance command")
     return parser.parse_args(argv)
 
 
@@ -529,6 +646,8 @@ def main(argv: list[str] | None = None) -> int:
             launch(cfg, args.apply)
         elif args.command == "status":
             return status(cfg)
+        elif args.command == "acceptance":
+            return acceptance(cfg, args.seconds)
         elif args.command == "stop":
             stop(cfg, args.apply)
         elif args.command == "plan":

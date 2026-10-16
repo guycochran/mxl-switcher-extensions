@@ -79,8 +79,17 @@ python3 deploy/online-demo/mxl_demo.py plan     --config demo-config.json
 python3 deploy/online-demo/mxl_demo.py bootstrap --config demo-config.json --apply
 python3 deploy/online-demo/mxl_demo.py launch   --config demo-config.json --apply
 python3 deploy/online-demo/mxl_demo.py status   --config demo-config.json
+python3 deploy/online-demo/mxl_demo.py acceptance --config demo-config.json --seconds 30
 python3 deploy/online-demo/mxl_demo.py stop     --config demo-config.json --apply
 ```
+
+`acceptance` is a read-only observation gate for a running deployment. It
+captures two snapshots, requires every owned service to remain running with
+zero restarts, verifies Core and all confidence outputs advance, enforces the
+hard-zero Core and terminal-torn rules, and checks YouTube source/audio
+readiness. It writes the full machine-readable result to the private
+`state_dir/acceptance-latest.json`; the report contains runtime identifiers and
+must not be committed.
 
 `prepare` may be rerun after ZoomISO's periodic flow rotation. It replaces the
 private resolved configuration atomically. Stop and relaunch this demo bundle
