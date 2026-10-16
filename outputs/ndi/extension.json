@@ -3,9 +3,9 @@
   "name": "program-ndi-output",
   "version": "0.1.0",
   "kind": "output",
-  "maturity": "concept",
+  "maturity": "prototype",
   "requires_core_api": "^1.0",
-  "entrypoint": null,
+  "entrypoint": "ndi_output.py",
   "capabilities": ["program.video.read", "program.audio.read", "ndi.send", "health.publish"],
   "flow_roles": {"reads": ["program.video", "program.audio"], "publishes": []},
   "health": {
@@ -14,6 +14,10 @@
     "readiness_path": "/api/v1/health/ready",
     "bind_scope": "loopback"
   },
-  "external_dependencies": ["NDI runtime and licensed SDK"],
+  "external_dependencies": [
+    "MXL GStreamer plugin",
+    "GStreamer gst-plugin-ndi",
+    "NDI runtime and licensed SDK"
+  ],
   "secret_refs": []
 }
