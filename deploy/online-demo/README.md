@@ -84,3 +84,33 @@ The later eight-source audio mixer was deployed and detected, but still needs a
 separate audience listening and long-run A/V synchronization gate. Treat this
 bundle as a reproducible demonstration profile, not an unattended production
 appliance.
+
+## Fresh-host smoke result (2026-10-16)
+
+The guarded bundle was exercised from bootstrap through cleanup on a clean,
+CPU-only 32-vCPU/128-GiB cloud host while an unrelated operator stack remained
+running. The generated, deployment-specific MediaMTX ports avoided that stack;
+the launcher did not stop or replace any permanent service.
+
+- `doctor` found eight live, uniquely paired ZoomISO video/audio sources.
+- `bootstrap` built the pinned Core, operator, and CPU YouTube images and pulled
+  the pinned MediaMTX image.
+- `launch` started all seven owned containers with zero restarts. Core, the
+  Skin, MediaMTX, and the YouTube controller all passed their endpoint checks.
+- Program, Preview, and the eight-source multiview each advanced continuously.
+  Their encoders reported no missing frames and no encoder restart.
+- The YouTube controller reported 8/8 distinct video sources plus 8/8 live
+  audio sources, ready for an operator-supplied destination and stream key.
+- Preview and Take commands crossed the Skin-to-Core boundary successfully;
+  Program was switched to a third input and restored to input 1.
+- Five non-transmitting resource samples kept each owned service below 0.23 of
+  one logical CPU and below 68 MiB RSS. This is a deployment/control smoke,
+  not a measurement of the 4K encoder under transmission load.
+- `stop` removed only the seven deployment-owned containers.
+
+The run also recorded one transient Core `too_late` increment during the live
+switch sequence and three torn-read retries on one multiview tile. Both then
+stayed bounded, with no missing frames, reader failure, encoder restart,
+sustained-unavailable alarm, or source regression. They remain explicit
+long-run acceptance items; this smoke result must not be presented as the final
+broadcast-readiness gate.

@@ -86,4 +86,5 @@ provider reports **deallocated**, not merely guest-stopped.
 
 Read [`deploy/online-demo/README.md`](deploy/online-demo/README.md) for the
 component boundaries, capacity guidance, failure behavior, and exact remaining
-acceptance gates.
+acceptance gates. That document also records the public-safe fresh-host smoke
+result, including bounded findings that still require a longer acceptance run.
