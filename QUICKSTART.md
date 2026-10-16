@@ -11,21 +11,37 @@ The launcher is intentionally split at the two steps only a human can safely
 perform: authorizing ZoomISO and entering the YouTube stream key. It never
 stores meeting credentials or streaming credentials.
 
-## 1. Clone and configure
+## Before you begin
+
+Use a Linux host with Docker, Git, Python 3, the licensed MXL runtime image,
+and a running licensed ZoomISO Cloud container. The demonstrated eight-source
+CPU profile used 32 modern logical CPUs and 128 GiB RAM; four sources can use a
+smaller host, but leave encoding headroom. No GPU is required for the proven
+CPU path.
+
+## 1. Clone and initialize
 
 ```sh
 git clone https://github.com/guycochran/mxl-switcher-extensions.git
 cd mxl-switcher-extensions
-cp deploy/online-demo/demo-config.example.json demo-config.json
+python3 deploy/online-demo/mxl_demo.py init
 ```
 
-Edit `demo-config.json` for the local MXL domain and licensed base image. Keep
-the file outside Git if it contains facility-specific paths; the repository
-ignores this exact filename. `domain_host_path` must be readable by the account
-running the launcher. If Docker keeps the volume below a root-only directory,
-run the launcher consistently with the same appropriately privileged account
-or bind the domain at a readable host path. The example contains no credentials
-or flow UUIDs.
+`init` detects usable Docker access, an unambiguous ZoomISO/MXL volume, and the
+installed `mxl-lab:latest` licensed base image, then writes the ignored local
+`demo-config.json`. It refuses to guess when more than one likely volume exists
+and prints the exact flag required. Examples:
+
+```sh
+python3 deploy/online-demo/mxl_demo.py init --domain-volume VOLUME_NAME
+python3 deploy/online-demo/mxl_demo.py init --source-count 4
+python3 deploy/online-demo/mxl_demo.py init --base-image YOUR_MXL_IMAGE
+```
+
+The selected MXL volume must be readable by the account running the launcher.
+If Docker stores it below a root-only directory, run the complete workflow
+consistently with the appropriately privileged account. The generated file
+contains no credentials or flow UUIDs.
 
 ## 2. Prepare ZoomISO
 
@@ -45,15 +61,13 @@ public meeting for confidential material.
 
 ```sh
 python3 deploy/online-demo/mxl_demo.py doctor --config demo-config.json
-python3 deploy/online-demo/mxl_demo.py bootstrap --config demo-config.json --apply
-python3 deploy/online-demo/mxl_demo.py launch --config demo-config.json --apply
+python3 deploy/online-demo/mxl_demo.py up --config demo-config.json --apply
 ```
 
-`bootstrap` obtains the pinned Core revision when needed and builds three local
-images. `launch` discovers only live numbered ZoomISO MXL outputs, writes a
-private runtime configuration, starts Core, starts one encoded confidence copy
-for Program/Preview/multiview, starts the ATEM-style Skin on loopback port 9710,
-and starts the YouTube controller on loopback port 18123.
+`up` reruns the doctor, obtains the pinned Core revision, builds the required
+local images, discovers only live paired ZoomISO outputs, writes private runtime
+configuration, and starts the seven labelled services. It stops on the first
+failed prerequisite rather than leaving a partial deployment.
 
 Open both through an SSH tunnel rather than exposing them publicly:
 
@@ -83,10 +97,14 @@ kept in memory, never returned by the API, and forgotten on stop.
 
 ```sh
 python3 deploy/online-demo/mxl_demo.py status --config demo-config.json
-python3 deploy/online-demo/mxl_demo.py stop --config demo-config.json --apply
+python3 deploy/online-demo/mxl_demo.py check --config demo-config.json --seconds 30
+python3 deploy/online-demo/mxl_demo.py down --config demo-config.json --apply
 ```
 
-The stop command removes only containers with the configured demo prefix. It
+`check` is the authoritative pass/fail gate. It requires owned services and
+confidence pictures to advance without restarts, terminal torn reads, missing
+sources, or Core hard-counter movement, and verifies YouTube source/audio
+readiness. `down` removes only containers with the configured ownership label. It
 does not stop ZoomISO, EasyMXL, Docker, the meeting, or unrelated services. If
 the host is a metered cloud VM, deallocate it separately and verify the cloud
 provider reports **deallocated**, not merely guest-stopped.
@@ -95,3 +113,5 @@ Read [`deploy/online-demo/README.md`](deploy/online-demo/README.md) for the
 component boundaries, capacity guidance, failure behavior, and exact remaining
 acceptance gates. That document also records the public-safe fresh-host smoke
 result, including bounded findings that still require a longer acceptance run.
+For a symptom-to-action guide, use
+[`deploy/online-demo/TROUBLESHOOTING.md`](deploy/online-demo/TROUBLESHOOTING.md).

@@ -215,6 +215,45 @@ class OnlineDemoTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "at least 15 seconds"):
             demo.acceptance(cfg, 10)
 
+    def test_init_writes_a_valid_local_config_from_one_detected_volume(self):
+        target = self.root / "generated.json"
+        with mock.patch.object(demo, "detect_docker_command", return_value=["docker"]), \
+             mock.patch.object(demo, "discover_domain_volumes", return_value=["zoomiso-domain"]), \
+             mock.patch.object(demo, "volume_mountpoint", return_value=str(self.domain)), \
+             mock.patch.object(demo, "image_exists", return_value=True):
+            demo.init_config(target, domain_volume=None, base_image="mxl-lab:latest",
+                             source_count=4, force=False)
+        value = json.loads(target.read_text())
+        self.assertEqual(value["domain_mount_source"], "zoomiso-domain")
+        self.assertEqual(value["domain_host_path"], str(self.domain))
+        self.assertEqual(value["source_count"], 4)
+        self.assertEqual(value["docker"], ["docker"])
+        demo.load_config(target)
+
+    def test_init_requires_an_unambiguous_domain_and_refuses_overwrite(self):
+        target = self.root / "generated.json"
+        with mock.patch.object(demo, "detect_docker_command", return_value=["docker"]), \
+             mock.patch.object(demo, "discover_domain_volumes", return_value=["one", "two"]):
+            with self.assertRaisesRegex(RuntimeError, "--domain-volume"):
+                demo.init_config(target, domain_volume=None, base_image="mxl-lab:latest",
+                                 source_count=8, force=False)
+        target.write_text("{}")
+        with self.assertRaisesRegex(RuntimeError, "--force"):
+            demo.init_config(target, domain_volume="one", base_image="mxl-lab:latest",
+                             source_count=8, force=False)
+
+    def test_up_runs_guarded_sequence_and_aliases_are_simple(self):
+        cfg = demo.load_config(self.config_file)
+        with mock.patch.object(demo, "doctor", return_value=0) as doctor, \
+             mock.patch.object(demo, "bootstrap") as bootstrap, \
+             mock.patch.object(demo, "launch") as launch:
+            demo.up(cfg, apply=True)
+        doctor.assert_called_once_with(cfg)
+        bootstrap.assert_called_once_with(cfg, apply=True)
+        launch.assert_called_once_with(cfg, apply=True)
+        self.assertEqual(demo.parse_args(["check"]).config, pathlib.Path("demo-config.json"))
+        self.assertEqual(demo.parse_args(["down"]).command, "down")
+
     def test_acceptance_evaluator_passes_a_clean_advancing_demo(self):
         source = {"torn": 0, "missing": 0, "live": True}
         before = {

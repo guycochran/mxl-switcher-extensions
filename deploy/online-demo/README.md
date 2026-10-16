@@ -25,6 +25,8 @@ reboot or VM power-up never revives them against a previous meeting's flows.
 
 ## Safety model
 
+- `init` writes only the requested ignored local configuration file and refuses
+  to replace one unless `--force` is explicit.
 - `doctor`, `prepare`, `plan`, and `status` are read-only outside the private
   state directory.
 - `bootstrap`, `launch`, and `stop` require `--apply`.
@@ -73,6 +75,7 @@ before compromising Program.
 ## Commands
 
 ```sh
+python3 deploy/online-demo/mxl_demo.py init
 python3 deploy/online-demo/mxl_demo.py doctor   --config demo-config.json
 python3 deploy/online-demo/mxl_demo.py prepare  --config demo-config.json
 python3 deploy/online-demo/mxl_demo.py plan     --config demo-config.json
@@ -82,6 +85,12 @@ python3 deploy/online-demo/mxl_demo.py status   --config demo-config.json
 python3 deploy/online-demo/mxl_demo.py acceptance --config demo-config.json --seconds 30
 python3 deploy/online-demo/mxl_demo.py stop     --config demo-config.json --apply
 ```
+
+For first-time operators, the supported short path is `init`, `doctor`, `up
+--apply`, `check`, and `down --apply`. The longer commands above remain
+available for engineering diagnosis and controlled rebuilds. See the
+[top-level quickstart](../../QUICKSTART.md) and
+[troubleshooting guide](TROUBLESHOOTING.md).
 
 `acceptance` is a read-only observation gate for a running deployment. It
 captures two snapshots, requires every owned service to remain running with
