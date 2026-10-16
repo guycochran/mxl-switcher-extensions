@@ -34,6 +34,13 @@ numbered outputs as native MXL with matching audio. Wait until every mapped row
 shows incoming video. This licensed, interactive step is deliberately not
 automated.
 
+For a non-production source, the public
+[Office Hours Zoom Test](https://officehours.global/zoomtest) page provides the
+current link to its continuously operated test meeting. It is an external
+service and may periodically reset, so confirm the meeting is active and all
+mapped ZoomISO rows are advancing before launching the bundle. Do not use the
+public meeting for confidential material.
+
 ## 3. Run one guarded launch
 
 ```sh
