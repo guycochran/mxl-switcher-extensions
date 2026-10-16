@@ -71,6 +71,25 @@ class ManifestValidationTests(unittest.TestCase):
             finally:
                 validate.ROOT = old_root
 
+    def test_profiles_cannot_escape_the_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            old_root = validate.ROOT
+            try:
+                validate.ROOT = pathlib.Path(directory) / "repo"
+                validate.ROOT.mkdir()
+                path = validate.ROOT / "profile.json"
+                path.write_text(json.dumps({
+                    "schema_version": 1,
+                    "name": "escape-profile",
+                    "audience": "test",
+                    "core": {"repository": "https://example.invalid/core", "ref": "v1"},
+                    "extensions": ["../../outside"],
+                }))
+                with self.assertRaisesRegex(ValueError, "escapes repository"):
+                    validate.profile(path)
+            finally:
+                validate.ROOT = old_root
+
     def test_health_paths_and_loopback_scope_are_validated(self):
         with tempfile.TemporaryDirectory() as directory:
             manifest = self.manifest()

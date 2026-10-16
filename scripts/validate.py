@@ -63,7 +63,11 @@ def profile(path: pathlib.Path) -> None:
     require(bool(item.get("core", {}).get("ref")), f"{path}: core.ref")
     require(isinstance(item.get("extensions"), list), f"{path}: extensions")
     for selected in item["extensions"]:
-        target = ROOT / selected
+        target = (ROOT / selected).resolve()
+        require(
+            target.is_relative_to(ROOT.resolve()),
+            f"{path}: extension path escapes repository {selected}",
+        )
         require(target.is_dir(), f"{path}: missing extension directory {selected}")
         require(
             (target / "extension.json").is_file(),

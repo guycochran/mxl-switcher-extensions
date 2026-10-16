@@ -58,6 +58,19 @@ class ProfileReadinessTests(unittest.TestCase):
         self.assertFalse(result["promotion_ready"])
         self.assertTrue(any(item["reason"] == "maturity" for item in result["blockers"]))
 
+    def test_profile_cannot_escape_the_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory) / "repo"
+            root.mkdir()
+            profile = root / "profile.json"
+            profile.write_text(json.dumps({
+                "name": "escape",
+                "core": {"repository": "https://example.invalid/core", "ref": "v1"},
+                "extensions": ["../../outside"],
+            }))
+            with self.assertRaisesRegex(ValueError, "escapes repository"):
+                check_profile.evaluate(root, profile)
+
 
 if __name__ == "__main__":
     unittest.main()

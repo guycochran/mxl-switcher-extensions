@@ -13,6 +13,7 @@ PROMOTABLE = {"candidate", "accepted"}
 
 
 def evaluate(root: pathlib.Path, profile_path: pathlib.Path) -> dict:
+    root = root.resolve()
     profile = json.loads(profile_path.read_text())
     core_ref = str(profile["core"]["ref"])
     blockers = []
@@ -20,7 +21,10 @@ def evaluate(root: pathlib.Path, profile_path: pathlib.Path) -> dict:
         blockers.append({"scope": "core", "reason": "mutable_ref", "value": core_ref})
     packages = []
     for selected in profile["extensions"]:
-        manifest = json.loads((root / selected / "extension.json").read_text())
+        package_path = (root / selected).resolve()
+        if not package_path.is_relative_to(root):
+            raise ValueError(f"extension path escapes repository: {selected}")
+        manifest = json.loads((package_path / "extension.json").read_text())
         package = {
             "path": selected,
             "name": manifest["name"],
