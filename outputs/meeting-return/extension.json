@@ -12,6 +12,7 @@
     "meeting.camera.send",
     "meeting.microphone.send",
     "clock.paired.schedule",
+    "audio.resample.bounded",
     "health.publish"
   ],
   "flow_roles": {

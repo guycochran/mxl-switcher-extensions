@@ -34,6 +34,8 @@ domains to that clock.
 - Video and audio start from one declared epoch.
 - Both queues are bounded; latency cannot grow without limit.
 - Audio correction and video drop/repeat policies are explicit and counted.
+- Production audio correction uses a capped, slew-limited resampling ratio;
+  whole-sample drop/repeat is diagnostic behavior, not the production path.
 - A writer re-anchor or timestamp discontinuity either recovers within the
   declared bound or fails closed.
 - A fixed presentation offset may align a stable path, but it is never used to
@@ -52,6 +54,8 @@ In addition to the common extension state, the adapter reports:
 - video drops/repeats and audio inserted/dropped samples;
 - PTS discontinuities, re-anchors, and hard corrections;
 - current and worst A/V skew; and
+- requested and applied audio-resampling ratio, saturation, and source/output
+  sample totals;
 - bounded restart count plus the last error.
 
 `ready=true` means the paired Program source is available and both output
@@ -69,19 +73,36 @@ cadence. An audio-only PLL stayed internally stable and did not repair the
 paired return. This localizes the next work to paired callback scheduling; it
 does not justify an arbitrary audio delay.
 
+The Core repository now contains the deterministic shared-clock scheduler,
+bounded ratio-controller contract, fail-closed simulation, and the exact
+non-proprietary questions needed from a meeting-runtime provider. That work is
+an offline foundation: the ratio contract has not yet been connected to a
+qualified payload resampler or to ZoomISO's internal virtual-device clock.
+
+The verified boundary is important. ZoomISO owns the virtual camera and
+microphone and exposes one selected MXL/NDI pair in its footer. The current
+integration can control that upstream pair but cannot observe or schedule the
+internal device callbacks. Until the runtime exposes a shared device clock or
+implements the paired scheduler internally, sender-side health alone cannot
+prove an accepted audience return.
+
 ## Promotion ladder
 
 1. Deterministic callback-jitter simulation with positive/negative rate error,
-   burst delivery, stalls, re-anchors, and bounded queues.
-2. Local loopback through the actual virtual camera/microphone boundary.
-3. Independent audience capture in a real destination meeting.
-4. Unchanged ten-minute, thirty-minute, and eight-hour holds.
+   burst delivery, stalls, re-anchors, and bounded queues. **Complete.**
+2. Process real float32 stereo payload through a production-quality bounded
+   resampler and pass objective tone/transient/continuity tests.
+3. Obtain a supported device-clock/telemetry boundary, then run local loopback
+   through the actual virtual camera/microphone path.
+4. Independent audience capture in a real destination meeting.
+5. Unchanged ten-minute, thirty-minute, and eight-hour holds.
 
 The audience capture must use moving frame codes and audio events tied to those
 codes. Acceptance requires bounded content-level A/V offset and range, zero
 unexplained discontinuities, declared cadence/correction limits, zero process
 restarts, and no upstream Core counter movement.
 
-The entrypoint remains intentionally absent until the shared-clock scheduler
-passes the offline gate. Licensed meeting SDKs and credentials are installed
-and referenced externally; they are never vendored or committed here.
+The entrypoint remains intentionally absent until payload resampling and the
+real device-clock boundary pass their offline gates. Licensed meeting SDKs and
+credentials are installed and referenced externally; they are never vendored
+or committed here.
