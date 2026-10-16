@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "name": "program-ndi-output",
+  "version": "0.1.0",
+  "kind": "output",
+  "maturity": "concept",
+  "requires_core_api": "^1.0",
+  "entrypoint": null,
+  "capabilities": ["program.video.read", "program.audio.read", "ndi.send", "health.publish"],
+  "flow_roles": {"reads": ["program.video", "program.audio"], "publishes": []},
+  "health": {
+    "state_path": "/api/v1/state",
+    "liveness_path": "/api/v1/health/live",
+    "readiness_path": "/api/v1/health/ready",
+    "bind_scope": "loopback"
+  },
+  "external_dependencies": ["NDI runtime and licensed SDK"],
+  "secret_refs": []
+}

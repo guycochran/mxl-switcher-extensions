@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "name": "program-rtmps-output",
+  "version": "0.1.0",
+  "kind": "output",
+  "maturity": "concept",
+  "requires_core_api": "^1.0",
+  "entrypoint": null,
+  "capabilities": ["program.video.read", "program.audio.read", "rtmps.send", "health.publish"],
+  "flow_roles": {"reads": ["program.video", "program.audio"], "publishes": []},
+  "health": {
+    "state_path": "/api/v1/state",
+    "liveness_path": "/api/v1/health/live",
+    "readiness_path": "/api/v1/health/ready",
+    "bind_scope": "loopback"
+  },
+  "external_dependencies": ["GStreamer 1.24+", "gst-mxl-rs mxlsrc", "RTMPS sink"],
+  "secret_refs": ["rtmps-stream-key"]
+}
