@@ -270,3 +270,12 @@ sample caught a brief upstream-source cadence dip and 471 ms source lateness;
 the encoder still reported 28.5 fps and RTMPS did not reconnect, then all eight
 sources returned to approximately 30 fps. A promotion claim still requires the
 sustained gate and paired audience timecode captures described above.
+
+After the audience demonstration, the controller was extended to pair each of
+the eight selected ZoomISO video flows with its corresponding float32 audio
+flow and feed them through a summed, limited stereo Program bus. The deployed
+pre-shutdown state reported `audio_source_count: 8` and described the profile
+as an eight-source Program mix. The key had been forgotten and no destination
+was active when that state was captured. Treat this as deployment verification,
+not yet as an audience-qualified eight-source audio result; listening quality,
+level behavior, and long-run A/V synchronization remain explicit gates.

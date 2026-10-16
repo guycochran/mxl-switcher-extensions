@@ -107,6 +107,13 @@ sustained audience acceptance gate remains open pending paired timecode
 captures and a continuously green telemetry window. The package is
 deliberately still labeled `prototype`.
 
+The follow-up controller build can derive one paired audio flow per selected
+ZoomISO video source and mix all eight into the stereo Program bus. Its final
+pre-shutdown state reported eight active video sources and eight active audio
+sources. This expands the demonstrated single-source Program audio path, but
+the new eight-source mix still needs a separate audience-listening gate before
+it is described as accepted broadcast audio.
+
 The shared operational layer is implemented today: manifests declare common
 state/liveness/readiness paths, adapters can use the thread-safe lifecycle and
 bounded restart primitives in `common/`, and `scripts/check_health.py` provides
