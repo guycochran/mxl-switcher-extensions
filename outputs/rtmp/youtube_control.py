@@ -77,6 +77,11 @@ class Controller:
 
     def snapshot(self) -> dict[str, Any]:
         sources = self.sources()
+        encoder_label = (
+            "H.264 High / x264 CPU / 30,000 Kbps CBR"
+            if self.args.video_encoder == "x264enc"
+            else "H.264 High / NVENC / 30,000 Kbps CBR"
+        )
         with self.lock:
             output = None if self.output is None else self.output.snapshot()
             running = self.worker is not None and self.worker.is_alive()
@@ -93,7 +98,7 @@ class Controller:
                 "profile": {
                     "canvas": "3840x2160p30",
                     "layout": "2x2 native 1080p sources" if self.args.source_count == 4 else "8 sources + status tile",
-                    "video": "H.264 High / NVENC / 30,000 Kbps CBR",
+                    "video": encoder_label,
                     "audio": "Stereo AAC / 128 Kbps / 44.1 kHz",
                     "transport": "RTMPS",
                 },
@@ -134,8 +139,9 @@ class Controller:
                 self.last_action = "Stream stopped and key forgotten"
 
 
-def page(csrf: str, source_count: int) -> bytes:
+def page(csrf: str, source_count: int, video_encoder: str = "nvh264enc") -> bytes:
     escaped = html.escape(csrf, quote=True)
+    encoder_label = "x264 CPU H.264 High" if video_encoder == "x264enc" else "NVENC H.264 High"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="csrf-token" content="{escaped}"><title>MXL YouTube 4K</title>
@@ -156,7 +162,7 @@ label{{display:block;color:var(--muted);font-size:12px;font-weight:700;margin:13
 <label for="key">Stream key</label><input id="key" type="password" autocomplete="off" placeholder="Paste key — it is kept only in memory" required>
 <div class="buttons"><button class="go" id="start" type="submit">Start stream</button><button class="stop" id="stop" type="button">Stop</button><button class="forget" id="forget" type="button">Stop + forget key</button></div></form><div id="message"></div>
 <p class="note">Set the broadcast to <b>Unlisted</b> in YouTube Studio before starting. This page is reachable only through the local SSH tunnel. The key is never returned by the API, printed, logged, placed in a command, or saved to disk.</p></section>
-<aside class="card"><h2>Transmission profile</h2><div class="meter"><div class="tile"><b id="count">0/{source_count}</b><span>live sources</span></div><div class="tile"><b>4K</b><span>3840×2160</span></div><div class="tile"><b>30</b><span>frames/sec</span></div><div class="tile"><b>30M</b><span>video bitrate</span></div></div><div id="sources" class="sources"></div><h2 style="margin-top:22px">Signal chain</h2><div class="spec"><div><span>Video</span><b>NVENC H.264 High</b></div><div><span>Audio</span><b>AAC stereo · 128K</b></div><div><span>GOP</span><b>2 seconds</b></div><div><span>Transport</span><b>RTMPS</b></div></div></aside></div></main>
+<aside class="card"><h2>Transmission profile</h2><div class="meter"><div class="tile"><b id="count">0/{source_count}</b><span>live sources</span></div><div class="tile"><b>4K</b><span>3840×2160</span></div><div class="tile"><b>30</b><span>frames/sec</span></div><div class="tile"><b>30M</b><span>video bitrate</span></div></div><div id="sources" class="sources"></div><h2 style="margin-top:22px">Signal chain</h2><div class="spec"><div><span>Video</span><b>{encoder_label}</b></div><div><span>Audio</span><b>AAC stereo · 128K</b></div><div><span>GOP</span><b>2 seconds</b></div><div><span>Transport</span><b>RTMPS</b></div></div></aside></div></main>
 <script>
 const csrf=document.querySelector('meta[name=csrf-token]').content,msg=document.getElementById('message');
 async function api(path,body){{const r=await fetch(path,{{method:body?'POST':'GET',headers:body?{{'content-type':'application/json','x-csrf-token':csrf}}:{{}},body:body?JSON.stringify(body):undefined,cache:'no-store'}});const j=await r.json();if(!r.ok)throw Error(j.error||'Request failed');return j}}
@@ -182,7 +188,11 @@ def handler_for(controller: Controller):
 
         def do_GET(self) -> None:
             if self.path == "/":
-                body = page(controller.csrf, controller.args.source_count)
+                body = page(
+                    controller.csrf,
+                    controller.args.source_count,
+                    controller.args.video_encoder,
+                )
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))

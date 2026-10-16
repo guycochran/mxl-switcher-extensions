@@ -49,6 +49,11 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertIn("kept only in memory", body)
         self.assertNotIn("stream-key-file", body)
 
+    def test_cpu_page_identifies_cpu_encoder(self):
+        body = control.page("csrf-value", 4, "x264enc").decode("utf-8")
+        self.assertIn("x264 CPU H.264 High", body)
+        self.assertNotIn("NVENC H.264 High", body)
+
     def test_discovery_can_pin_an_instance_by_flow_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             self.make_flow(directory, "primary-1", 1, "primary-device")
