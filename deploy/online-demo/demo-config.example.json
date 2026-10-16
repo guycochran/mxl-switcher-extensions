@@ -6,7 +6,7 @@
   "docker": ["sudo", "docker"],
   "base_image": "mxl-lab:latest",
   "core_repository": "https://github.com/guycochran/mxl-switcher-core.git",
-  "core_ref": "29a7a9f0b427f69ac541bca1413ed2627339c119",
+  "core_ref": "07c08c4ea11b93ca1f9c42adde21780d0e041b09",
   "core_repo": "",
   "core_image": "mxl-switcher-core:online-demo",
   "operator_image": "mxl-operator-suite:online-demo",
