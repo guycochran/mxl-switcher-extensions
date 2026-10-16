@@ -73,10 +73,20 @@ Program Audio, measured A/V skew/drop telemetry, and staged duration gates are
 complete.
 
 The [meeting-return output](outputs/meeting-return) now has a versioned concept
-manifest and paired-clock acceptance contract. Its sender side has passed an
-isolated hold, but the independent audience gate exposed accumulating A/V error
-after the meeting boundary. It remains a concept until one shared-clock adapter
-passes deterministic callback-jitter, local-loopback, and real audience gates.
+manifest and paired-clock acceptance contract. Its deterministic callback and
+rate-controller simulation is complete, but real payload resampling and access
+to the meeting runtime's internal device clock remain open. Its sender side has
+passed an isolated hold, while the independent audience gate exposed
+accumulating A/V error after the meeting boundary. It remains a concept until a
+shared-clock adapter passes payload, local-loopback, and real audience gates.
+
+The [NDI output](outputs/ndi) is now a paired Program A/V prototype extracted
+from the accepted video-only Core NDI pilot. It supervises one bounded
+GStreamer pipeline, publishes float32 48 kHz stereo audio with Program video,
+reopens both readers together when either stable MXL flow is replaced, limits
+restarts, and exposes the common loopback health contract. The package remains
+below candidate maturity until its paired audio/video path completes live NDI
+receiver, timing, recovery, and resource gates.
 
 The shared operational layer is implemented today: manifests declare common
 state/liveness/readiness paths, adapters can use the thread-safe lifecycle and
