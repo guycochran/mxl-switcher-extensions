@@ -92,6 +92,38 @@ class YouTubeControlTests(unittest.TestCase):
             self.assertIsNone(controller.worker)
             self.assertFalse(controller.configured)
 
+    def test_mix_source_audio_pairs_by_output_number_on_a_shared_device(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = control.parser().parse_args([
+                "--domain", directory, "--audio-flow", "fallback",
+                "--source-count", "4", "--active-seconds", "5",
+                "--mix-source-audio",
+            ])
+            # One ZoomISO device publishes every numbered output.
+            for output in range(1, 5):
+                self.make_flow(directory, f"video-{output}", output, "shared-device")
+            for output in (1, 2, 3):
+                self.make_audio_flow(
+                    directory, f"audio-{output}", output=output,
+                    device="shared-device", age=4 - output,
+                )
+            controller = control.Controller(args)
+            sources = controller.sources()
+            # Output 4 has no audio; it must not borrow another participant's flow.
+            self.assertEqual(
+                controller.audio_flows(sources), ["audio-1", "audio-2", "audio-3"]
+            )
+            self.assertFalse(controller.audio_ready())
+
+            self.make_audio_flow(
+                directory, "audio-4", output=4, device="shared-device",
+            )
+            self.assertEqual(
+                controller.audio_flows(sources),
+                ["audio-1", "audio-2", "audio-3", "audio-4"],
+            )
+            self.assertTrue(controller.audio_ready())
+
     def test_mix_source_audio_pairs_every_selected_video_device(self):
         with tempfile.TemporaryDirectory() as directory:
             args = control.parser().parse_args([
