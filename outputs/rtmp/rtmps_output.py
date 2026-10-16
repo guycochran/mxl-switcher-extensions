@@ -1,0 +1,309 @@
+#!/usr/bin/env python3
+"""Supervised, secret-safe MXL Program A/V output to RTMPS."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import pathlib
+import signal
+import stat
+import threading
+import time
+import urllib.parse
+from http.server import ThreadingHTTPServer
+from typing import Any
+
+from common.health import handler_for_snapshot
+from youtube_8up_canvas import Input, parse_input, tile_positions, write_label_png
+
+
+QUEUE_NS = 2_000_000_000
+
+
+def read_stream_key(path: pathlib.Path) -> str:
+    info = path.stat()
+    if not stat.S_ISREG(info.st_mode):
+        raise ValueError("stream-key path is not a regular file")
+    if info.st_mode & 0o077:
+        raise ValueError("stream-key file must not be accessible by group or other users")
+    if info.st_uid != os.geteuid():
+        raise ValueError("stream-key file must be owned by the output process user")
+    key = path.read_text(encoding="utf-8").strip()
+    allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+    if not key or len(key) > 200 or any(char not in allowed for char in key):
+        raise ValueError("stream-key file does not contain one valid key")
+    return key
+
+
+def destination_url(server_url: str, stream_key: str) -> str:
+    parsed = urllib.parse.urlsplit(server_url)
+    if parsed.scheme != "rtmps" or not parsed.hostname:
+        raise ValueError("production destination must be an rtmps:// URL")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ValueError("destination URL cannot contain credentials, query, or fragment")
+    if any(char in server_url for char in "\r\n\t"):
+        raise ValueError("destination URL contains control characters")
+    return server_url.rstrip("/") + "/" + stream_key
+
+
+def pipeline_description(args: argparse.Namespace) -> str:
+    """Return a pipeline with a named sink but no destination secret."""
+    parts = [
+        "flvmux name=mux streamable=true skip-backwards-streams=true",
+        "! identity name=mux_bytes silent=true",
+        "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0",
+        "! rtmpsink name=destination sync=false async=false",
+    ]
+    inputs = getattr(args, "input", None) or []
+    if inputs:
+        if len(inputs) != 8:
+            raise ValueError("direct 4K canvas output requires exactly eight inputs")
+        parts.extend(["compositor name=mix background=black force-live=true ignore-inactive-pads=true"])
+        for index, (x, y) in enumerate(tile_positions()):
+            parts.extend([
+                f"sink_{index}::xpos={x}",
+                f"sink_{index}::ypos={y}",
+                "sink_%d::width=1280" % index,
+                "sink_%d::height=720" % index,
+            ])
+        parts.extend([
+            f"! video/x-raw,format=BGRA,width=3840,height=2160,framerate={args.rate}",
+            "! videoconvert n-threads=8",
+            f"! video/x-raw,format=NV12,width=3840,height=2160,framerate={args.rate},colorimetry=bt709",
+        ])
+    else:
+        if not args.video_flow:
+            raise ValueError("either --video-flow or exactly eight --input values are required")
+        parts.extend([
+            f"mxlsrc domain={args.domain} video-flow-id={args.video_flow} automatic-eos=false",
+            "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 leaky=downstream",
+            "! videoconvert n-threads=8",
+            f"! video/x-raw,format=NV12,width=3840,height=2160,framerate={args.rate},colorimetry=bt709",
+        ])
+    parts.extend([
+        f"! {args.video_encoder} name=video_encoder bitrate={args.video_bitrate_kbps}",
+        "rc-mode=cbr gop-size=60 bframes=2 aud=true cabac=true",
+        "strict-gop=true repeat-sequence-header=true vbv-buffer-size=60000",
+        "! video/x-h264,profile=high,stream-format=byte-stream,alignment=au",
+        "! identity name=encoded_video silent=true ! h264parse config-interval=-1",
+        "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 ! mux.video",
+        f"mxlsrc domain={args.domain} audio-flow-id={args.audio_flow} automatic-eos=false",
+        "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 leaky=downstream",
+        "! audioconvert ! audioresample quality=10",
+        f"! audio/x-raw,rate={args.audio_rate_hz},channels=2",
+        f"! avenc_aac bitrate={args.audio_bitrate_bps}",
+        "! identity name=encoded_audio silent=true ! aacparse",
+        "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 ! mux.audio",
+    ])
+    if inputs:
+        asset_dir = pathlib.Path(args.assets_dir)
+        for index, source in enumerate(inputs):
+            asset = asset_dir / f"source-{index + 1}.png"
+            write_label_png(asset, 1280, 88, source.label)
+            parts.extend([
+                f"mxlsrc domain={args.domain} video-flow-id={source.flow_id} automatic-eos=false",
+                "! queue max-size-buffers=3 max-size-bytes=0 max-size-time=0 leaky=downstream",
+                "! videoconvert n-threads=2 ! videoscale method=1 add-borders=false",
+                f"! video/x-raw,format=BGRA,width=1280,height=720,framerate={args.rate}",
+                f"! gdkpixbufoverlay location={asset} offset-y=632",
+                "! queue max-size-buffers=2 leaky=downstream",
+                f"! mix.sink_{index}",
+            ])
+        brand = asset_dir / "brand.png"
+        write_label_png(brand, 1280, 720, args.brand_text)
+        parts.extend([
+            "videotestsrc is-live=true pattern=black",
+            f"! video/x-raw,format=BGRA,width=1280,height=720,framerate={args.rate}",
+            f"! gdkpixbufoverlay location={brand}",
+            "! queue max-size-buffers=2 leaky=downstream ! mix.sink_8",
+        ])
+    return " ".join(parts)
+
+
+class Output:
+    def __init__(self, args: argparse.Namespace, stream_key: str) -> None:
+        self.args = args
+        self.stream_key = stream_key
+        self.url = destination_url(args.server_url, stream_key)
+        self.lock = threading.RLock()
+        self.stop_event = threading.Event()
+        self.pipeline = None
+        self.state = "starting"
+        self.revision = 0
+        self.reconnects = 0
+        self.last_error: str | None = None
+        self.started_at = time.monotonic()
+        self.last_mux_at = 0.0
+        self.counts = {"video": 0, "audio": 0, "mux_buffers": 0, "mux_bytes": 0}
+
+    def _redact(self, value: object) -> str:
+        return str(value).replace(self.stream_key, "<redacted>").replace(
+            self.url, "<redacted-destination>"
+        )
+
+    def _probe(self, name: str):
+        def count(_pad, info):
+            buffer = info.get_buffer()
+            with self.lock:
+                if name == "mux":
+                    self.counts["mux_buffers"] += 1
+                    self.counts["mux_bytes"] += 0 if buffer is None else buffer.get_size()
+                    self.last_mux_at = time.monotonic()
+                else:
+                    self.counts[name] += 1
+            return self.Gst.PadProbeReturn.OK
+
+        return count
+
+    def _start(self) -> None:
+        pipeline = self.Gst.parse_launch(pipeline_description(self.args))
+        sink = pipeline.get_by_name("destination")
+        sink.set_property("location", self.url + " live=1")
+        for element_name, metric in (
+            ("encoded_video", "video"), ("encoded_audio", "audio"), ("mux_bytes", "mux")
+        ):
+            pipeline.get_by_name(element_name).get_static_pad("src").add_probe(
+                self.Gst.PadProbeType.BUFFER, self._probe(metric)
+            )
+        if pipeline.set_state(self.Gst.State.PLAYING) == self.Gst.StateChangeReturn.FAILURE:
+            pipeline.set_state(self.Gst.State.NULL)
+            raise RuntimeError("pipeline failed to enter PLAYING")
+        with self.lock:
+            self.pipeline = pipeline
+            self.state = "streaming"
+            self.last_error = None
+            self.revision += 1
+
+    def _stop_pipeline(self) -> None:
+        if self.pipeline is not None:
+            self.pipeline.set_state(self.Gst.State.NULL)
+        self.pipeline = None
+
+    def run(self) -> int:
+        import gi
+
+        gi.require_version("Gst", "1.0")
+        from gi.repository import Gst
+
+        self.Gst = Gst
+        Gst.init(None)
+        backoff = 1.0
+        while not self.stop_event.is_set():
+            try:
+                self._start()
+                bus = self.pipeline.get_bus()
+                while not self.stop_event.wait(0.25):
+                    message = bus.pop_filtered(Gst.MessageType.ERROR | Gst.MessageType.EOS)
+                    if message is None:
+                        continue
+                    if message.type == Gst.MessageType.ERROR:
+                        error, _debug = message.parse_error()
+                        raise RuntimeError(self._redact(error.message))
+                    raise RuntimeError("pipeline reached EOS")
+                backoff = 1.0
+            except Exception as error:
+                with self.lock:
+                    self.reconnects += 1
+                    self.state = "retrying"
+                    self.last_error = self._redact(error)
+                    self.revision += 1
+                print(json.dumps({
+                    "event": "retry", "reason": self.last_error, "backoff_s": backoff
+                }), flush=True)
+                self.stop_event.wait(backoff)
+                backoff = min(self.args.max_retry_seconds, backoff * 2)
+            finally:
+                self._stop_pipeline()
+        with self.lock:
+            self.state = "stopped"
+            self.revision += 1
+        return 0
+
+    def snapshot(self) -> dict[str, Any]:
+        with self.lock:
+            now = time.monotonic()
+            mux_age = None if not self.last_mux_at else now - self.last_mux_at
+            ready = (
+                self.state == "streaming"
+                and self.counts["video"] > 0
+                and self.counts["audio"] > 0
+                and mux_age is not None
+                and mux_age < 5.0
+            )
+            return {
+                "name": "program-rtmps-output", "kind": "output",
+                "destination": self.args.destination_label, "state": self.state,
+                "ready": ready, "revision": self.revision,
+                "reconnects": self.reconnects, "last_error": self.last_error,
+                "uptime_seconds": round(now - self.started_at, 3),
+                "metrics": {
+                    **self.counts,
+                    "last_mux_age_seconds": None if mux_age is None else round(mux_age, 3),
+                    "video_bitrate_kbps": self.args.video_bitrate_kbps,
+                    "audio_bitrate_bps": self.args.audio_bitrate_bps,
+                    "audio_rate_hz": self.args.audio_rate_hz,
+                    "resolution": "3840x2160", "frame_rate": self.args.rate,
+                    "queue_bound_ns": QUEUE_NS,
+                },
+            }
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(description=__doc__)
+    result.add_argument("--domain", default="/mxl-domain")
+    result.add_argument("--video-flow")
+    result.add_argument("--input", action="append", type=parse_input)
+    result.add_argument("--audio-flow", required=True)
+    result.add_argument("--stream-key-file", type=pathlib.Path, required=True)
+    result.add_argument("--server-url", default="rtmps://a.rtmps.youtube.com/live2")
+    result.add_argument("--destination-label", default="YouTube Live")
+    result.add_argument("--brand-text", default="MXL LIVE | 4K")
+    result.add_argument("--assets-dir", default="/tmp/mxl-youtube-4k-assets")
+    result.add_argument("--video-encoder", default="nvh264enc")
+    result.add_argument("--video-bitrate-kbps", type=int, default=30000)
+    result.add_argument("--audio-bitrate-bps", type=int, default=128000)
+    result.add_argument("--audio-rate-hz", type=int, default=44100)
+    result.add_argument("--rate", default="30/1")
+    result.add_argument("--bind", default="127.0.0.1")
+    result.add_argument("--port", type=int, default=18120)
+    result.add_argument("--max-retry-seconds", type=float, default=30.0)
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parser().parse_args(argv)
+    if args.bind not in {"127.0.0.1", "::1", "localhost"}:
+        raise SystemExit("refusing non-loopback health bind")
+    if not 1000 <= args.video_bitrate_kbps <= 100000:
+        raise SystemExit("video bitrate is outside the allowed range")
+    if bool(args.video_flow) == bool(args.input):
+        raise SystemExit("choose one --video-flow or exactly eight --input values")
+    if args.input and len(args.input) != 8:
+        raise SystemExit("direct 4K canvas output requires exactly eight --input values")
+    try:
+        key = read_stream_key(args.stream_key_file)
+        destination_url(args.server_url, key)
+    except (OSError, ValueError) as error:
+        raise SystemExit(str(error)) from error
+    output = Output(args, key)
+    server = ThreadingHTTPServer((args.bind, args.port), handler_for_snapshot(output.snapshot))
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    signal.signal(signal.SIGTERM, lambda *_: output.stop_event.set())
+    signal.signal(signal.SIGINT, lambda *_: output.stop_event.set())
+    print(json.dumps({
+        "event": "launch", "destination": args.destination_label,
+        "resolution": "3840x2160", "frame_rate": args.rate,
+        "video_bitrate_kbps": args.video_bitrate_kbps,
+    }), flush=True)
+    try:
+        return output.run()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
