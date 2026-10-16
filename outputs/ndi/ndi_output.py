@@ -15,6 +15,7 @@ from typing import Callable
 
 from common.health import handler_for_snapshot
 from common.runtime import ExtensionRuntime, RestartBudget
+from outputs.ndi.ndi_av_probe import probe as verify_ndi_av
 
 
 QUEUE_NS = 500_000_000
@@ -90,16 +91,19 @@ class NDIOutput:
         *,
         popen: Callable[..., subprocess.Popen] = subprocess.Popen,
         clock: Callable[[], float] = time.monotonic,
+        verifier: Callable[..., dict] = verify_ndi_av,
     ) -> None:
         self.args = args
         self.popen = popen
         self.clock = clock
+        self.verifier = verifier
         self.runtime = ExtensionRuntime("program-ndi-output", "output")
         self.budget = RestartBudget(args.max_restarts, args.restart_window_seconds, clock=clock)
         self.process: subprocess.Popen | None = None
         self.started_at: float | None = None
         self.flow_inodes: tuple[int, int] | None = None
         self.stop_requested = False
+        self.wire_verification: dict | None = None
         self.lock = threading.RLock()
 
     def _flow_dirs(self) -> tuple[pathlib.Path, pathlib.Path]:
@@ -122,6 +126,11 @@ class NDIOutput:
             "video_input_available": self._flow_dirs()[0].is_dir(),
             "audio_input_available": self._flow_dirs()[1].is_dir(),
             "paired_av": True,
+            "wire_av_verified": bool(
+                self.wire_verification and self.wire_verification.get("passed")
+            ),
+            "wire_video_buffers": 0 if not self.wire_verification else self.wire_verification.get("video_buffers", 0),
+            "wire_audio_buffers": 0 if not self.wire_verification else self.wire_verification.get("audio_buffers", 0),
             "audio_rate_hz": AUDIO_RATE,
             "audio_channels": AUDIO_CHANNELS,
             "queue_bound_ns": QUEUE_NS,
@@ -168,6 +177,23 @@ class NDIOutput:
                 raise
             self.flow_inodes = inodes
             self.started_at = self.clock()
+            try:
+                self.wire_verification = self.verifier(
+                    self.args.verification_source_name,
+                    self.args.verification_seconds,
+                    self.args.verification_connect_timeout_ms,
+                )
+            except Exception as exc:
+                self.wire_verification = {"passed": False, "error": str(exc)}
+            if not self.wire_verification.get("passed"):
+                process = self.process
+                if process is not None and process.poll() is None:
+                    try:
+                        os.killpg(process.pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                self.runtime.transition("failed", error="NDI wire A/V verification failed")
+                raise RuntimeError("NDI wire A/V verification failed")
 
     def stop(self) -> None:
         with self.lock:
@@ -230,6 +256,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--video-flow", required=True)
     parser.add_argument("--audio-flow", required=True)
     parser.add_argument("--ndi-name", default="MXL Switcher Program")
+    parser.add_argument(
+        "--verification-source-name",
+        required=True,
+        help="full advertised NDI source name, for example HOST (MXL Switcher Program)",
+    )
+    parser.add_argument("--verification-seconds", type=float, default=3.0)
+    parser.add_argument("--verification-connect-timeout-ms", type=int, default=10_000)
     parser.add_argument("--bind", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18120)
     parser.add_argument("--poll-seconds", type=float, default=1.0)
@@ -241,7 +274,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     _flow_name(args.audio_flow)
     if args.bind not in {"127.0.0.1", "::1", "localhost"}:
         parser.error("health bind must remain loopback-only")
-    if args.poll_seconds <= 0 or args.stop_timeout_seconds <= 0:
+    if (
+        args.poll_seconds <= 0
+        or args.stop_timeout_seconds <= 0
+        or args.verification_seconds <= 0
+        or args.verification_connect_timeout_ms <= 0
+    ):
         parser.error("poll and stop timeouts must be positive")
     return args
 

@@ -77,12 +77,24 @@ class LifecycleTests(unittest.TestCase):
             video_flow="video",
             audio_flow="audio",
             ndi_name="Program",
+            verification_source_name="HOST (Program)",
+            verification_seconds=0.01,
+            verification_connect_timeout_ms=10,
             max_restarts=1,
             restart_window_seconds=60.0,
             poll_seconds=0.01,
             stop_timeout_seconds=0.1,
         )
-        self.adapter = ndi.NDIOutput(self.args, popen=popen, clock=lambda: self.now)
+        self.adapter = ndi.NDIOutput(
+            self.args,
+            popen=popen,
+            clock=lambda: self.now,
+            verifier=lambda *_args: {
+                "passed": True,
+                "video_buffers": 3,
+                "audio_buffers": 7,
+            },
+        )
 
     def test_both_essences_are_required_and_health_is_paired(self):
         self.adapter.start()
@@ -91,6 +103,9 @@ class LifecycleTests(unittest.TestCase):
         state = self.adapter.snapshot()
         self.assertEqual((state["state"], state["ready"]), ("running", True))
         self.assertTrue(state["metrics"]["paired_av"])
+        self.assertTrue(state["metrics"]["wire_av_verified"])
+        self.assertEqual(state["metrics"]["wire_video_buffers"], 3)
+        self.assertEqual(state["metrics"]["wire_audio_buffers"], 7)
         self.assertEqual(state["metrics"]["audio_rate_hz"], 48000)
         self.audio.rmdir()
         self.assertEqual(self.adapter.check(), "wait")
@@ -120,6 +135,23 @@ class LifecycleTests(unittest.TestCase):
             self.adapter.start()
         self.assertEqual(self.processes, [])
         self.assertFalse(self.adapter.snapshot()["ready"])
+
+    def test_wire_verification_failure_stops_before_ready(self):
+        adapter = ndi.NDIOutput(
+            self.args,
+            popen=self.adapter.popen,
+            clock=lambda: self.now,
+            verifier=lambda *_args: {
+                "passed": False,
+                "video_buffers": 3,
+                "audio_buffers": 0,
+            },
+        )
+        with self.assertRaisesRegex(RuntimeError, "wire A/V verification"):
+            adapter.start()
+        state = adapter.snapshot()
+        self.assertEqual((state["state"], state["ready"]), ("failed", False))
+        self.assertFalse(state["metrics"]["wire_av_verified"])
 
 
 if __name__ == "__main__":

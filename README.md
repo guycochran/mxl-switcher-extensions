@@ -84,9 +84,11 @@ The [NDI output](outputs/ndi) is now a paired Program A/V prototype extracted
 from the accepted video-only Core NDI pilot. It supervises one bounded
 GStreamer pipeline, publishes float32 48 kHz stereo audio with Program video,
 reopens both readers together when either stable MXL flow is replaced, limits
-restarts, and exposes the common loopback health contract. The package remains
-below candidate maturity until its paired audio/video path completes live NDI
-receiver, timing, recovery, and resource gates.
+restarts, and exposes the common loopback health contract. A live receiver
+smoke proved that both essences traverse the NDI wire. Readiness now requires
+that same wire-level A/V proof, preventing an incompatible but process-alive
+MXL reader from appearing healthy. The package remains below candidate
+maturity until sustained timing, recovery, and resource gates pass.
 
 The shared operational layer is implemented today: manifests declare common
 state/liveness/readiness paths, adapters can use the thread-safe lifecycle and
