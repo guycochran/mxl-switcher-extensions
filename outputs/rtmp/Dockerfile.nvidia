@@ -1,6 +1,6 @@
 FROM mxl-lab:latest
 
-ARG NVIDIA_DRIVER_SERIES=550
+ARG NVIDIA_DRIVER_SERIES=580
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
