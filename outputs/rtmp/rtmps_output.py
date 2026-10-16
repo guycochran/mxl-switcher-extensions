@@ -22,6 +22,13 @@ from youtube_8up_canvas import Input, parse_input, tile_positions, write_label_p
 QUEUE_NS = 2_000_000_000
 
 
+def validate_stream_key(key: str) -> str:
+    allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+    if not key or len(key) > 200 or any(char not in allowed for char in key):
+        raise ValueError("stream key is not valid")
+    return key
+
+
 def read_stream_key(path: pathlib.Path) -> str:
     info = path.stat()
     if not stat.S_ISREG(info.st_mode):
@@ -31,13 +38,11 @@ def read_stream_key(path: pathlib.Path) -> str:
     if info.st_uid != os.geteuid():
         raise ValueError("stream-key file must be owned by the output process user")
     key = path.read_text(encoding="utf-8").strip()
-    allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
-    if not key or len(key) > 200 or any(char not in allowed for char in key):
-        raise ValueError("stream-key file does not contain one valid key")
-    return key
+    return validate_stream_key(key)
 
 
 def destination_url(server_url: str, stream_key: str) -> str:
+    validate_stream_key(stream_key)
     parsed = urllib.parse.urlsplit(server_url)
     if parsed.scheme != "rtmps" or not parsed.hostname:
         raise ValueError("production destination must be an rtmps:// URL")

@@ -75,6 +75,9 @@ class RTMPSOutputTests(unittest.TestCase):
         ):
             with self.assertRaises(ValueError):
                 rtmps.destination_url(value, "abc-def")
+        for key in ("", "key/with/slashes", "key with spaces", "x" * 201):
+            with self.assertRaises(ValueError):
+                rtmps.destination_url("rtmps://a.rtmps.youtube.com/live2", key)
 
 
 if __name__ == "__main__":
