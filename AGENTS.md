@@ -29,7 +29,10 @@ Produce a guarded ZoomISO Cloud → MXL Core demonstration with:
   `QUICKSTART.md`.
 - Do not stop or replace ZoomISO, EasyMXL, meetings, Docker, networking, or
   unrelated containers. `stop --apply` may remove only the seven containers
-  owned by the configured `deployment_id`.
+  owned by the configured `deployment_id`. Ownership is the launcher's
+  container label, not the name; `stop` refuses a same-named container without it.
+- Demo containers have no restart policy. After a reboot or VM power-up they stay
+  down until an operator relaunches against freshly discovered flows.
 - Do not enable the Skin's ME/SuperSource controls until their compositor is a
   versioned, portable package. Direct Cut, Preview, and Take are the supported
   controls in this bundle.
