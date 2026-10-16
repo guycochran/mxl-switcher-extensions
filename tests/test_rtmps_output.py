@@ -89,12 +89,14 @@ class RTMPSOutputTests(unittest.TestCase):
             )
             self.assertIn("cairooverlay name=brand_clock", description)
             self.assertLess(
-                description.index("compositor name=mix"),
+                description.index(
+                    "videotestsrc is-live=true pattern=ball animation-mode=frames motion=sweep"
+                ),
                 description.index("cairooverlay name=brand_clock"),
             )
             self.assertLess(
                 description.index("cairooverlay name=brand_clock"),
-                description.index("identity name=composed_video"),
+                description.rindex("mix.sink_8"),
             )
             self.assertNotIn("mxlsink", description)
             self.assertNotIn("gdkpixbufoverlay", description)

@@ -166,9 +166,6 @@ def pipeline_description(args: argparse.Namespace) -> str:
         parts.append(
             f"! video/x-raw,format=BGRA,width=3840,height=2160,framerate={args.rate}"
         )
-        if len(inputs) == 8:
-            # Draw after composition so clock cadence proves composed output cadence.
-            parts.append("! cairooverlay name=brand_clock")
         parts.extend([
             "! videoconvert n-threads=8",
             f"! video/x-raw,format=NV12,width=3840,height=2160,framerate={args.rate},colorimetry=bt709",
@@ -218,6 +215,10 @@ def pipeline_description(args: argparse.Namespace) -> str:
                 "videotestsrc is-live=true pattern=ball animation-mode=frames motion=sweep",
                 "background-color=0xff071018 foreground-color=0xff26d9e9",
                 f"! video/x-raw,format=BGRA,width={tile_width},height={tile_height},framerate={args.rate}",
+                # Keep Cairo on the 1280x720 diagnostic tile. Running it after
+                # the compositor forces a full 4K BGRA map/copy on every frame
+                # and cuts CPU-only throughput well below real time.
+                "! cairooverlay name=brand_clock",
                 "! queue max-size-buffers=2 leaky=downstream ! mix.sink_8",
             ])
         else:
@@ -273,7 +274,7 @@ class Output:
         """Draw timecode directly into each video frame without reparsing SVG."""
         elapsed = timestamp / 1_000_000_000 if timestamp >= 0 else time.monotonic() - self.started_at
         value = running_timecode(elapsed, self.args.rate)
-        x_offset, y_offset = (2560, 1440) if len(self.args.input or []) == 8 else (0, 0)
+        x_offset, y_offset = (0, 0)
         cairo = self._cairo
         pointer = hash(context)
         cairo.cairo_set_source_rgba(pointer, 0.027, 0.063, 0.094, 0.92)

@@ -89,7 +89,8 @@ all selected source branches to advance, encoded video near the requested
 cadence, encoded AAC frames at no less than 90% of the Program sample rate's
 frame cadence (46.875 frames/s at 48 kHz), fresh mux output and actual RTMP-sink bytes at
 no less than 70% of the requested video bitrate, and (for eight-up) the
-post-compositor diagnostic clock to advance at the encoded cadence. Source
+diagnostic-tile clock to advance at the requested cadence while encoded-video
+cadence independently proves the composed output. Source
 lateness must remain inside the compositor's 90 ms readiness budget. A reconnect remains visible
 in telemetry even after the pipeline recovers. A two-frame downstream-leaky
 queue between the compositor and encoder prevents a slow encoder from building
