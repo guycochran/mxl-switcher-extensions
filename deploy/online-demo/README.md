@@ -27,7 +27,7 @@ reboot or VM power-up never revives them against a previous meeting's flows.
 
 - `init` writes only the requested ignored local configuration file and refuses
   to replace one unless `--force` is explicit.
-- `doctor`, `prepare`, `plan`, and `status` are read-only outside the private
+- `preflight`/`doctor`, `prepare`, `plan`, and `status` are read-only outside the private
   state directory.
 - `bootstrap`, `launch`, `up`, `stop`, and `down` require `--apply`.
 - Launch refuses occupied ports, existing same-name containers, stale/missing
@@ -86,14 +86,16 @@ python3 deploy/online-demo/mxl_demo.py acceptance --config demo-config.json --se
 python3 deploy/online-demo/mxl_demo.py stop     --config demo-config.json --apply
 ```
 
-For first-time operators, the supported short path is `init`, `doctor`, `up
---apply`, `check`, and `down --apply`. The longer commands above remain
+For first-time operators, the supported short path is `./mxl-demo init`,
+`./mxl-demo preflight`, `./mxl-demo up --apply`, `./mxl-demo check`, and
+`./mxl-demo down --apply`. `preflight` is a plain-language alias for `doctor`.
+The longer commands above remain
 available for engineering diagnosis and controlled rebuilds. See the
 [top-level quickstart](../../QUICKSTART.md) and
 [troubleshooting guide](TROUBLESHOOTING.md). The licensed image is an
 operator-supplied prerequisite with a machine-checked
 [base-image contract](BASE_IMAGE.md); `mxl-lab:latest` is not a public image.
-The [licensed prerequisite onboarding guide](PREREQUISITES.md) covers the
+The [prerequisite onboarding guide](PREREQUISITES.md) covers the
 authorized-image, ZoomISO, host, security, and cloud handoff steps that must be
 complete before this launcher takes control.
 
@@ -193,7 +195,7 @@ not a from-zero installation of Linux, Docker, or the licensed images.
   documented `deployment_id`, loopback port fields, and absolute `state_dir`;
   a host without conflicting services can retain their defaults.
 - `doctor` passed Docker, Git, the live 8/8 paired-source requirement, the
-  complete licensed base-image contract, the pinned MediaMTX image, and the
+  complete operator-supplied base-image contract, the pinned MediaMTX image, and the
   32-logical-CPU capacity recommendation.
 - The first `up --apply` cloned and pinned Core, built all three local images,
   and started all seven labelled services with zero restarts.

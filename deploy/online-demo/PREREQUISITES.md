@@ -1,8 +1,8 @@
-# Licensed prerequisite onboarding
+# Prerequisite onboarding
 
 This page covers the part of the online demonstration that the public
-repository cannot install: the licensed ZoomISO Cloud application and an MXL
-SDK runtime image. Once the checkpoint at the bottom of this page passes, use
+repository cannot install: the licensed ZoomISO Cloud application and a
+compatible operator-controlled MXL runtime image. Once the checkpoint at the bottom of this page passes, use
 the [end-to-end quickstart](../../QUICKSTART.md) without adding a second launch
 path.
 
@@ -12,14 +12,16 @@ path.
 | --- | --- | --- | --- |
 | Linux host, Docker, Git, and Python 3 | Operator or cloud provider | Host | Yes |
 | ZoomISO Cloud container/image and license | Operator's authorized ZoomISO source | Local Docker image and running container | Indirectly, through its live MXL domain |
-| MXL SDK/runtime materials and redistribution rights | Operator's authorized MXL source | Operator-controlled local base image | Yes, item by item |
+| Open-source MXL SDK and `gst-mxl-rs`, plus codec plugins | Operator builds or obtains | Operator-controlled local base image | Yes, item by item |
 | Core, Skin, confidence monitors, and YouTube adapter | This public repository plus pinned public dependencies | Built locally by `up` | Yes |
 | Meeting authorization, participant mapping, YouTube destination, and stream key | Human operator | Interactive applications or process memory only | Deliberately not automated |
 
-The repository contains no vendor credentials, SDK archive, private registry
-address, licensed image, meeting credential, or stream key. A successful lab
-run does not grant permission to copy its private images to another person or
-cloud account.
+The repository contains no vendor credentials, private registry address,
+prebuilt runtime image, meeting credential, or stream key. MXL itself is
+Apache-2.0 open source, but that does not automatically grant permission to
+redistribute a complete image containing ZoomISO or separately licensed codec
+components. A successful lab run does not grant permission to copy its private
+images to another person or cloud account.
 
 ## 1. Prepare one host
 
@@ -42,19 +44,28 @@ do not open the operator web ports to the public Internet.
 
 ## 2. Stage the licensed software
 
-Obtain ZoomISO Cloud and the MXL SDK/runtime through the operator's authorized
-vendor channels and accept their applicable terms. Use the vendor's documented
-installation procedure. If an authorized image is delivered as a Docker
-archive, load it locally without committing the archive or its name to Git:
+Obtain ZoomISO Cloud through its authorized vendor channel and use the vendor's
+documented installation procedure. Build the Apache-2.0 MXL SDK and
+`gst-mxl-rs` plugin from the public Media eXchange Layer project, or obtain an
+operator-controlled image containing them. Use an MXL revision compatible with
+the installed ZoomISO release; confirm that revision with the ZoomISO vendor or
+its release notes.
+
+Review the licenses of every codec component before distributing a complete
+image. If an image that the operator is permitted to use is delivered as a
+Docker archive, load it locally without committing the archive or its name to
+Git:
 
 ```sh
 docker load --input /operator-controlled/path/licensed-image.tar
 docker image ls
 ```
 
-If the authorized source is a private registry, authenticate interactively or
-with the provider's credential helper. Do not put a registry password or token
-in this repository, `demo-config.json`, shell history, or a launcher argument.
+If the authorized source is a private registry, authenticate interactively with
+the provider's credential helper. Plain `docker login` without a credential
+helper can leave a base64-encoded token in `~/.docker/config.json`; keep that
+file out of this repository and every evidence bundle. Do not put a registry
+password or token in `demo-config.json`, shell history, or a launcher argument.
 
 The public launcher accepts any local base-image tag. Retagging is optional:
 
@@ -88,6 +99,8 @@ answer **yes** to all of these:
   audio and show advancing incoming video.
 - The MXL domain is a known named volume or readable absolute path.
 - An authorized local base image is present and its tag is known.
+- The base image's MXL SDK and `mxlsrc` versions are compatible with the MXL
+  version used by the installed ZoomISO release.
 - The host is x86-64, non-burstable, and has enough CPU/RAM headroom for the
   selected source count.
 - The operator can create the documented SSH tunnel; no controller port needs
@@ -105,7 +118,7 @@ Run `init` with the exact domain source and image tag when automatic detection
 is not unambiguous:
 
 ```sh
-python3 deploy/online-demo/mxl_demo.py init \
+./mxl-demo init \
   --domain-volume YOUR_ZOOMISO_MXL_VOLUME \
   --base-image YOUR_LOCAL_MXL_IMAGE
 ```
@@ -117,24 +130,26 @@ For a host bind mount or tmpfs, replace `--domain-volume` with
 Then use only the supported operator sequence:
 
 ```sh
-python3 deploy/online-demo/mxl_demo.py doctor --config demo-config.json
-python3 deploy/online-demo/mxl_demo.py up --config demo-config.json --apply
-python3 deploy/online-demo/mxl_demo.py check --config demo-config.json --seconds 30
-python3 deploy/online-demo/mxl_demo.py down --config demo-config.json --apply
+./mxl-demo preflight --config demo-config.json
+./mxl-demo up --config demo-config.json --apply
+./mxl-demo check --config demo-config.json --seconds 30
+./mxl-demo down --config demo-config.json --apply
 ```
 
-`doctor` is the go/no-go checkpoint. It must report the Docker API, live paired
-source count, local base image, and licensed base-image contract as `PASS`.
+`preflight` is the plain-language alias for the existing read-only `doctor`
+command and is the go/no-go checkpoint. It must report the Docker API, live paired
+source count, local base image, and runtime-image contract as `PASS`.
 Warnings about images built by `up` are expected on the first run. Do not work
 around a failed licensed-image probe by editing the launcher.
 
 ## Cloud portability boundary
 
-The bundle has passed its published operator rehearsal on a CPU-only Azure VM.
+The bundle has passed its published operator rehearsal on a CPU-only Azure VM
+with the required prerequisites preinstalled, alongside existing services.
 Its architecture is provider-neutral and should transfer to equivalent
 non-burstable x86-64 instances on AWS or Google Cloud, provided the operator
-legally stages the same licensed prerequisites on that host. That is
+stages a licensed ZoomISO instance and the same compatible runtime prerequisites
+on that host. That is
 portability guidance, not an AWS or Google Cloud acceptance claim. Repeat
-`doctor`, the 30-second gate, the audience check, cleanup, and provider-level
+`preflight`, the 30-second gate, the audience check, cleanup, and provider-level
 deallocation on each new platform before describing it as qualified.
-

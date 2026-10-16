@@ -276,7 +276,7 @@ def init_config(path: pathlib.Path, *, domain_volume: str | None,
     has_flow_definitions = next(pathlib.Path(mountpoint).glob("*.mxl-flow/flow_def.json"), None)
     if not image_exists({"docker": docker_command}, base_image):
         raise RuntimeError(
-            f"licensed base image {base_image!r} is not installed; load/build it "
+            f"operator-supplied base image {base_image!r} is not installed; load/build it "
             "or select the correct image with --base-image"
         )
     config = read_json(EXAMPLE_CONFIG)
@@ -298,7 +298,7 @@ def init_config(path: pathlib.Path, *, domain_volume: str | None,
     if not has_flow_definitions:
         print("WARN: the selected domain has no flow definitions yet; doctor will "
               f"verify this exact source after ZoomISO mapping: {mount_source}")
-    print("NEXT: map matching ZoomISO MXL video/audio outputs, then run `doctor`.")
+    print("NEXT: map matching ZoomISO MXL video/audio outputs, then run `./mxl-demo preflight`.")
 
 
 def quote(command: list[str]) -> str:
@@ -469,7 +469,7 @@ def image_exists(cfg: dict, image: str) -> bool:
 
 
 def base_image_contract(cfg: dict) -> tuple[bool, str]:
-    """Probe the licensed local base without exposing or redistributing it."""
+    """Probe the operator-controlled local base without exposing its contents."""
     proc = subprocess.run(
         docker(cfg, "run", "--rm", "--entrypoint", "python3", cfg["base_image"],
                "-c", BASE_IMAGE_PROBE),
@@ -520,7 +520,7 @@ def doctor(cfg: dict, strict_images: bool = False) -> int:
         failures += (not ok and (strict_images or image == cfg["base_image"]))
     if docker_ok and image_exists(cfg, cfg["base_image"]):
         ok, detail = base_image_contract(cfg)
-        print(f"  {'PASS' if ok else 'FAIL'} licensed base-image contract"
+        print(f"  {'PASS' if ok else 'FAIL'} operator base-image contract"
               + ("" if ok else f": {detail}"))
         failures += not ok
     cpu = os.cpu_count() or 0
@@ -901,9 +901,9 @@ def stop(cfg: dict, apply: bool) -> None:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog="./mxl-demo", description=__doc__)
     parser.add_argument("command", choices=(
-        "init", "doctor", "prepare", "plan", "bootstrap", "launch", "up",
+        "init", "preflight", "doctor", "prepare", "plan", "bootstrap", "launch", "up",
         "status", "acceptance", "check", "stop", "down",
     ))
     parser.add_argument("--config", type=pathlib.Path,
@@ -916,7 +916,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--domain-path",
                         help="host path containing the live MXL domain (bind-mount setups)")
     parser.add_argument("--base-image", default="mxl-lab:latest",
-                        help="installed licensed MXL SDK runtime image")
+                        help="installed operator-supplied MXL runtime image")
     parser.add_argument("--source-count", type=int, choices=(4, 8), default=8)
     parser.add_argument("--force", action="store_true",
                         help="allow init to replace an existing config file")
@@ -933,7 +933,7 @@ def main(argv: list[str] | None = None) -> int:
                         force=args.force)
             return 0
         cfg = load_config(args.config)
-        if args.command == "doctor":
+        if args.command in ("preflight", "doctor"):
             return doctor(cfg)
         if args.command == "prepare":
             prepare(cfg)

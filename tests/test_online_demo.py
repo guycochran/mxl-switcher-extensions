@@ -352,6 +352,28 @@ class OnlineDemoTests(unittest.TestCase):
         probe.assert_called_once_with(cfg)
         self.assertIn('"identity"', demo.BASE_IMAGE_PROBE)
 
+    def test_preflight_is_a_plain_language_doctor_alias(self):
+        cfg = demo.load_config(self.config_file)
+        with mock.patch.object(demo, "load_config", return_value=cfg), \
+             mock.patch.object(demo, "doctor", return_value=0) as doctor:
+            self.assertEqual(
+                demo.main(["preflight", "--config", str(self.config_file)]), 0
+            )
+        doctor.assert_called_once_with(cfg)
+
+    def test_top_level_wrapper_exposes_the_supported_commands(self):
+        wrapper = MODULE_PATH.parents[2] / "mxl-demo"
+        self.assertTrue(wrapper.is_file())
+        self.assertTrue(os.access(wrapper, os.X_OK))
+        proc = demo.subprocess.run(
+            [str(wrapper), "--help"], text=True, capture_output=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("usage: ./mxl-demo", proc.stdout)
+        self.assertIn("preflight", proc.stdout)
+        self.assertIn("up", proc.stdout)
+        self.assertIn("down", proc.stdout)
+
     def test_plan_rediscovers_current_flows(self):
         cfg = demo.load_config(self.config_file)
         stale = pathlib.Path(cfg["state_dir"])

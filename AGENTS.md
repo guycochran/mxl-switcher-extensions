@@ -23,7 +23,8 @@ Produce a guarded ZoomISO Cloud → MXL Core demonstration with:
   chat output.
 - Do not automate Zoom authorization, participant mapping, or entry of the
   YouTube stream key. Ask the human to perform those steps.
-- Run `init`, `doctor`, `up --apply`, `check`, and `down --apply`; do not
+- Run `./mxl-demo init`, `./mxl-demo preflight`, `./mxl-demo up --apply`,
+  `./mxl-demo check`, and `./mxl-demo down --apply`; do not
   improvise a second deployment path. The longer bootstrap/launch commands are
   engineering diagnostics, not the first-time operator workflow.
 - Keep the Skin and YouTube controller on loopback and use the SSH tunnel from
@@ -43,7 +44,7 @@ Produce a guarded ZoomISO Cloud → MXL Core demonstration with:
 
 ## Acceptance before calling a run successful
 
-1. `mxl_demo.py status` reports all seven owned containers running with zero
+1. `./mxl-demo status` reports all seven owned containers running with zero
    restarts and all three control endpoints reachable.
 2. Program, Preview, and the multiview wall visibly advance.
 3. The YouTube controller's sustained gate in `outputs/rtmp/README.md` passes.
