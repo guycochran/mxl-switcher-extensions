@@ -16,6 +16,12 @@
     "reads": ["program.video", "program.audio"],
     "publishes": []
   },
+  "health": {
+    "state_path": "/api/v1/state",
+    "liveness_path": "/api/v1/health/live",
+    "readiness_path": "/api/v1/health/ready",
+    "bind_scope": "loopback"
+  },
   "external_dependencies": ["TAMS API service", "S3-compatible object storage"],
   "secret_refs": ["tams-api-token", "tams-object-store-credentials"]
 }

@@ -16,7 +16,8 @@ inputs.
 Every package contains `extension.json`, validated by
 [`schemas/extension.schema.json`](../schemas/extension.schema.json). It declares
 identity, maturity, compatible Core API, flow roles, capabilities, entrypoint,
-and any external dependencies.
+health paths, and any external dependencies. Health binds are loopback-only;
+an authenticated facility proxy may expose them deliberately.
 
 ## Runtime state
 
@@ -38,6 +39,11 @@ All implementations expose a common snapshot, directly or through a supervisor:
 Allowed states are `disabled`, `starting`, `ready`, `running`, `degraded`, and
 `failed`. Readiness means media can be accepted or delivered; liveness means
 only that the process responds.
+
+Every manifest declares the common state, liveness, and readiness paths. The
+current v1 contract uses `/api/v1/state`, `/api/v1/health/live`, and
+`/api/v1/health/ready`. A liveness response is not evidence that an adapter is
+safe to route; automation and EIC surfaces use readiness for that decision.
 
 ## Media rules
 

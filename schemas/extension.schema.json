@@ -12,7 +12,8 @@
     "maturity",
     "requires_core_api",
     "capabilities",
-    "flow_roles"
+    "flow_roles",
+    "health"
   ],
   "properties": {
     "schema_version": {"const": 1},
@@ -36,6 +37,17 @@
       "properties": {
         "reads": {"type": "array", "items": {"type": "string"}},
         "publishes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state_path", "liveness_path", "readiness_path", "bind_scope"],
+      "properties": {
+        "state_path": {"type": "string", "pattern": "^/api/v1/"},
+        "liveness_path": {"type": "string", "pattern": "^/api/v1/"},
+        "readiness_path": {"type": "string", "pattern": "^/api/v1/"},
+        "bind_scope": {"const": "loopback"}
       }
     },
     "external_dependencies": {
