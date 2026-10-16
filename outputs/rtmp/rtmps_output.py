@@ -66,6 +66,7 @@ def video_encoder_description(args: argparse.Namespace) -> list[str]:
             "tune=zerolatency speed-preset=ultrafast pass=cbr",
             "key-int-max=60 bframes=0 byte-stream=true aud=true",
             "vbv-buf-capacity=2000 threads=16 sliced-threads=true",
+            'option-string="nal-hrd=cbr:force-cfr=1"',
         ]
     return [
         f"! {args.video_encoder} name=video_encoder bitrate={args.video_bitrate_kbps}",
@@ -178,7 +179,7 @@ def pipeline_description(args: argparse.Namespace) -> str:
                 "videotestsrc is-live=true pattern=ball animation-mode=frames motion=sweep",
                 "background-color=0xff071018 foreground-color=0xff26d9e9",
                 f"! video/x-raw,format=BGRA,width={tile_width},height={tile_height},framerate={args.rate}",
-                "! rsvgoverlay name=brand_clock fit-to-frame=true",
+                "! cairooverlay name=brand_clock",
                 "! queue max-size-buffers=2 leaky=downstream ! mix.sink_8",
             ])
         else:
@@ -211,17 +212,31 @@ class Output:
         self.rates = {"video_fps": 0.0, "audio_buffers_per_second": 0.0, "mux_kbps": 0.0}
         self.timecode_updates = 0
 
-    def _clock_loop(self, pipeline: object, overlay: object) -> None:
-        # Updating rsvgoverlay reparses the SVG. Once per second keeps the
-        # diagnostic clock obvious without stealing cadence from a 4K CPU encode.
-        while not self.stop_event.wait(1.0):
-            with self.lock:
-                if self.pipeline is not pipeline:
-                    return
-                elapsed = time.monotonic() - self.started_at
-            overlay.set_property("data", timecode_svg(elapsed, self.args.rate))
-            with self.lock:
-                self.timecode_updates += 1
+    def _draw_clock(
+        self, _overlay: object, context: object, timestamp: int, _duration: int
+    ) -> None:
+        """Draw timecode directly into each video frame without reparsing SVG."""
+        elapsed = timestamp / 1_000_000_000 if timestamp >= 0 else time.monotonic() - self.started_at
+        value = running_timecode(elapsed, self.args.rate)
+        context.set_source_rgba(0.027, 0.063, 0.094, 0.92)
+        context.rectangle(110, 190, 1060, 330)
+        context.fill_preserve()
+        context.set_source_rgb(0.149, 0.851, 0.914)
+        context.set_line_width(4)
+        context.stroke()
+        context.select_font_face("monospace", 0, 1)
+        context.set_font_size(58)
+        label = "LIVE TIMECODE"
+        extents = context.text_extents(label)
+        context.move_to(640 - extents.width / 2 - extents.x_bearing, 300)
+        context.show_text(label)
+        context.set_source_rgb(0.957, 0.969, 1.0)
+        context.set_font_size(132)
+        extents = context.text_extents(value)
+        context.move_to(640 - extents.width / 2 - extents.x_bearing, 440)
+        context.show_text(value)
+        with self.lock:
+            self.timecode_updates += 1
 
     def _redact(self, value: object) -> str:
         return str(value).replace(self.stream_key, "<redacted>").replace(
@@ -248,7 +263,7 @@ class Output:
         sink.set_property("location", self.url)
         clock_overlay = pipeline.get_by_name("brand_clock")
         if clock_overlay is not None:
-            clock_overlay.set_property("data", timecode_svg(0.0, self.args.rate))
+            clock_overlay.connect("draw", self._draw_clock)
         for element_name, metric in (
             ("encoded_video", "video"), ("encoded_audio", "audio"), ("mux_bytes", "mux")
         ):
@@ -263,13 +278,6 @@ class Output:
             self.state = "streaming"
             self.last_error = None
             self.revision += 1
-        if clock_overlay is not None:
-            threading.Thread(
-                target=self._clock_loop,
-                args=(pipeline, clock_overlay),
-                name="youtube-live-timecode",
-                daemon=True,
-            ).start()
 
     def _stop_pipeline(self) -> None:
         if self.pipeline is not None:

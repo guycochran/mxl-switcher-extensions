@@ -53,6 +53,7 @@ class RTMPSOutputTests(unittest.TestCase):
         self.assertIn("vbv-buf-capacity=2000", description)
         self.assertIn("threads=16", description)
         self.assertIn("sliced-threads=true", description)
+        self.assertIn('option-string="nal-hrd=cbr:force-cfr=1"', description)
         self.assertNotIn("rc-mode=", description)
         self.assertNotIn("gop-size=", description)
         self.assertNotIn("strict-gop=", description)
@@ -72,7 +73,7 @@ class RTMPSOutputTests(unittest.TestCase):
                 "videotestsrc is-live=true pattern=ball animation-mode=frames motion=sweep",
                 description,
             )
-            self.assertIn("rsvgoverlay name=brand_clock fit-to-frame=true", description)
+            self.assertIn("cairooverlay name=brand_clock", description)
             self.assertNotIn("mxlsink", description)
             self.assertTrue((pathlib.Path(directory) / "brand.png").is_file())
 
