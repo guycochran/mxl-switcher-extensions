@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "name": "srt-mxl-input",
+  "version": "0.1.0",
+  "kind": "input",
+  "maturity": "concept",
+  "requires_core_api": "^1.0",
+  "entrypoint": null,
+  "capabilities": ["srt.receive", "mxl.video.publish", "mxl.audio.publish", "health.publish"],
+  "flow_roles": {"reads": [], "publishes": ["source.video", "source.audio"]},
+  "health": {"state_path": "/api/v1/state", "liveness_path": "/api/v1/health/live", "readiness_path": "/api/v1/health/ready", "bind_scope": "loopback"},
+  "external_dependencies": ["GStreamer 1.24+", "SRT runtime", "gst-mxl-rs mxlsink"],
+  "secret_refs": ["srt-passphrase"]
+}
