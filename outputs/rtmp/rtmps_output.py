@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import os
 import pathlib
@@ -218,23 +219,23 @@ class Output:
         """Draw timecode directly into each video frame without reparsing SVG."""
         elapsed = timestamp / 1_000_000_000 if timestamp >= 0 else time.monotonic() - self.started_at
         value = running_timecode(elapsed, self.args.rate)
-        context.set_source_rgba(0.027, 0.063, 0.094, 0.92)
-        context.rectangle(110, 190, 1060, 330)
-        context.fill_preserve()
-        context.set_source_rgb(0.149, 0.851, 0.914)
-        context.set_line_width(4)
-        context.stroke()
-        context.select_font_face("monospace", 0, 1)
-        context.set_font_size(58)
+        cairo = self._cairo
+        pointer = hash(context)
+        cairo.cairo_set_source_rgba(pointer, 0.027, 0.063, 0.094, 0.92)
+        cairo.cairo_rectangle(pointer, 110, 190, 1060, 330)
+        cairo.cairo_fill_preserve(pointer)
+        cairo.cairo_set_source_rgb(pointer, 0.149, 0.851, 0.914)
+        cairo.cairo_set_line_width(pointer, 4)
+        cairo.cairo_stroke(pointer)
+        cairo.cairo_select_font_face(pointer, b"monospace", 0, 1)
+        cairo.cairo_set_font_size(pointer, 58)
         label = "LIVE TIMECODE"
-        extents = context.text_extents(label)
-        context.move_to(640 - extents.width / 2 - extents.x_bearing, 300)
-        context.show_text(label)
-        context.set_source_rgb(0.957, 0.969, 1.0)
-        context.set_font_size(132)
-        extents = context.text_extents(value)
-        context.move_to(640 - extents.width / 2 - extents.x_bearing, 440)
-        context.show_text(value)
+        cairo.cairo_move_to(pointer, 390, 300)
+        cairo.cairo_show_text(pointer, label.encode("ascii"))
+        cairo.cairo_set_source_rgb(pointer, 0.957, 0.969, 1.0)
+        cairo.cairo_set_font_size(pointer, 132)
+        cairo.cairo_move_to(pointer, 245, 440)
+        cairo.cairo_show_text(pointer, value.encode("ascii"))
         with self.lock:
             self.timecode_updates += 1
 
@@ -263,6 +264,19 @@ class Output:
         sink.set_property("location", self.url)
         clock_overlay = pipeline.get_by_name("brand_clock")
         if clock_overlay is not None:
+            self._cairo = ctypes.CDLL("libcairo.so.2")
+            pointer = ctypes.c_void_p
+            number = ctypes.c_double
+            self._cairo.cairo_set_source_rgba.argtypes = [pointer, number, number, number, number]
+            self._cairo.cairo_rectangle.argtypes = [pointer, number, number, number, number]
+            self._cairo.cairo_fill_preserve.argtypes = [pointer]
+            self._cairo.cairo_set_source_rgb.argtypes = [pointer, number, number, number]
+            self._cairo.cairo_set_line_width.argtypes = [pointer, number]
+            self._cairo.cairo_stroke.argtypes = [pointer]
+            self._cairo.cairo_select_font_face.argtypes = [pointer, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+            self._cairo.cairo_set_font_size.argtypes = [pointer, number]
+            self._cairo.cairo_move_to.argtypes = [pointer, number, number]
+            self._cairo.cairo_show_text.argtypes = [pointer, ctypes.c_char_p]
             clock_overlay.connect("draw", self._draw_clock)
         for element_name, metric in (
             ("encoded_video", "video"), ("encoded_audio", "audio"), ("mux_bytes", "mux")
