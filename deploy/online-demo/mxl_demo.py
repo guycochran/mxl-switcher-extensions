@@ -85,7 +85,7 @@ try:
     if Gst.version() < (1, 24, 0, 0):
         missing.append("gstreamer:1.24+")
     required = (
-        "mxlsrc", "appsrc", "queue", "x264enc", "h264parse", "flvmux",
+        "mxlsrc", "appsrc", "queue", "identity", "x264enc", "h264parse", "flvmux",
         "rtmpsink", "rtmp2sink", "compositor", "videoscale", "videoconvert",
         "videotestsrc", "cairooverlay", "audiomixer", "audioconvert",
         "audioresample", "rglimiter", "avenc_aac", "aacparse",
@@ -211,6 +211,26 @@ def volume_mountpoint(docker_command: list[str], name: str) -> str:
     return mountpoint
 
 
+def validate_domain_binding(cfg: dict) -> str:
+    """Require host discovery and container mounting to address one domain."""
+    source = str(cfg["domain_mount_source"])
+    if os.path.isabs(source):
+        mounted_path = os.path.realpath(source)
+    else:
+        try:
+            mounted_path = os.path.realpath(volume_mountpoint(cfg["docker"], source))
+        except subprocess.CalledProcessError as error:
+            raise RuntimeError(f"cannot resolve configured MXL volume {source!r}") from error
+    discovered_path = os.path.realpath(str(cfg["domain_host_path"]))
+    if mounted_path != discovered_path:
+        raise RuntimeError(
+            "MXL domain mismatch: discovery reads "
+            f"{discovered_path}, but containers would mount {source} ({mounted_path}); "
+            "rerun init and do not edit the two domain fields independently"
+        )
+    return discovered_path
+
+
 def discover_domain_volumes(docker_command: list[str]) -> list[str]:
     proc = subprocess.run([*docker_command, "volume", "ls", "--format", "{{.Name}}"],
                           check=True, text=True, capture_output=True)
@@ -312,7 +332,7 @@ def container_owner(cfg: dict, name: str) -> str | None:
 
 
 def discover(cfg: dict, active_seconds: float = 30.0) -> list[dict]:
-    domain = pathlib.Path(cfg["domain_host_path"])
+    domain = pathlib.Path(validate_domain_binding(cfg))
     if not readable_dir(domain):
         raise RuntimeError(f"MXL domain is not readable: {domain}; {ACCOUNT_HINT}")
     now = time.time()

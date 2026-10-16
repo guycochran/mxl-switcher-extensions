@@ -17,7 +17,7 @@ The image must contain the following runtime and build contract:
 - a C++20 compiler and Make, used to build the pinned Core revision;
 - Python 3 with PyGObject/GStreamer, NumPy, and OpenCV;
 - GStreamer 1.24 or later with `gst-mxl-rs` `mxlsrc`;
-- the elements used by the confidence and YouTube paths: `appsrc`, `queue`,
+- the elements used by the confidence and YouTube paths: `appsrc`, `queue`, `identity`,
   `x264enc`, `h264parse`, `flvmux`, `rtmpsink`, `rtmp2sink`, `compositor`,
   `videoscale`, `videoconvert`, `videotestsrc`, `cairooverlay`, `audiomixer`,
   `audioconvert`, `audioresample`, `rglimiter`, `avenc_aac`, and `aacparse`;

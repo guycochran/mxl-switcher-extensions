@@ -28,7 +28,7 @@ class OnlineDemoTests(unittest.TestCase):
             "deployment_id": "test-demo",
             "source_count": 4,
             "domain_host_path": str(self.domain),
-            "domain_mount_source": "test-domain",
+            "domain_mount_source": str(self.domain),
             "docker": ["docker"],
             "base_image": "mxl-lab:latest",
             "core_repository": "https://example.invalid/core.git",
@@ -98,6 +98,31 @@ class OnlineDemoTests(unittest.TestCase):
         definition.write_text(json.dumps(value))
         cfg = demo.load_config(self.config_file)
         self.assertEqual(len(demo.discover(cfg)), 3)
+
+    def test_discovery_refuses_a_different_bind_mount_domain(self):
+        value = dict(self.config)
+        value["domain_mount_source"] = str(self.root / "other-domain")
+        self.config_file.write_text(json.dumps(value))
+        with self.assertRaisesRegex(RuntimeError, "MXL domain mismatch"):
+            demo.discover(demo.load_config(self.config_file))
+
+    def test_discovery_refuses_a_named_volume_pointing_elsewhere(self):
+        value = dict(self.config)
+        value["domain_mount_source"] = "zoomiso-domain"
+        self.config_file.write_text(json.dumps(value))
+        cfg = demo.load_config(self.config_file)
+        with mock.patch.object(demo, "volume_mountpoint",
+                               return_value=str(self.root / "other-domain")):
+            with self.assertRaisesRegex(RuntimeError, "MXL domain mismatch"):
+                demo.discover(cfg)
+
+    def test_discovery_accepts_a_named_volume_matching_the_host_path(self):
+        value = dict(self.config)
+        value["domain_mount_source"] = "zoomiso-domain"
+        self.config_file.write_text(json.dumps(value))
+        cfg = demo.load_config(self.config_file)
+        with mock.patch.object(demo, "volume_mountpoint", return_value=str(self.domain)):
+            self.assertEqual(len(demo.discover(cfg)), 4)
 
     def test_prepare_keeps_runtime_ids_out_of_repository(self):
         cfg = demo.load_config(self.config_file)
@@ -325,6 +350,7 @@ class OnlineDemoTests(unittest.TestCase):
                                return_value=demo.subprocess.CompletedProcess([], 0)):
             self.assertEqual(demo.doctor(cfg), 1)
         probe.assert_called_once_with(cfg)
+        self.assertIn('"identity"', demo.BASE_IMAGE_PROBE)
 
     def test_plan_rediscovers_current_flows(self):
         cfg = demo.load_config(self.config_file)
