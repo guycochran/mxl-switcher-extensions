@@ -24,6 +24,11 @@ an unbounded supervisor loop.
 Keeping liveness and readiness separate prevents a running-but-unusable media
 adapter from appearing healthy on an EIC dashboard.
 
+`scripts/check_health.py` is the matching fail-closed deployment probe. It
+reads the paths from an extension manifest, verifies liveness, readiness,
+public state, and adapter identity, and returns nonzero unless all four agree.
+It accepts loopback URLs only and does not print the configured URL.
+
 **Maturity:** prototype. The API is covered by offline tests and the file
 recorder is the first integrated adapter; it is not yet a separately versioned
 package.
