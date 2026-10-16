@@ -118,9 +118,35 @@ the launcher did not stop or replace any permanent service.
   not a measurement of the 4K encoder under transmission load.
 - `stop` removed only the seven deployment-owned containers.
 
-The run also recorded one transient Core `too_late` increment during the live
-switch sequence and three torn-read retries on one multiview tile. Both then
-stayed bounded, with no missing frames, reader failure, encoder restart,
-sustained-unavailable alarm, or source regression. They remain explicit
-long-run acceptance items; this smoke result must not be presented as the final
-broadcast-readiness gate.
+That first run also recorded one transient Core `too_late` increment during the
+live switch sequence and three rejected ring-race reads on one multiview tile.
+The follow-up below closes both deployment-smoke caveats without weakening
+either detector.
+
+## Caveat-zero repeat (2026-10-16)
+
+The same fresh-host sequence was repeated after pinning Core `29a7a9f` and
+selecting the qualified two-frame ZoomISO operating point:
+
+- all eight paired video/audio sources passed discovery;
+- all seven owned services started and remained at zero restarts;
+- Preview input 3, Take, Preview input 1, and Take restored Program input 1 at
+  revision 4;
+- `invalid`, `too_early`, `too_late`, `timeouts`, `reader_reopens`, all sync
+  errors, `no_common_window`, input regressions, and sustained-unavailable
+  counters remained zero from baseline through the switch and hold;
+- Program, Preview, and all eight multiview inputs advanced with zero missing
+  reads, zero terminal torn reads, and zero encoder restarts;
+- six raw ring races on one multiview input were all recovered by the one-shot
+  fresh-head retry. The retry and recovery counts remain visible in telemetry;
+- the idle 4K controller found eight distinct video sources and eight live
+  audio sources with `audio_ready=true`; no destination or key was supplied;
+- sampled CPU stayed within 11.77–24.75% for Core, 22.53–26.29% for Program
+  confidence, 6.22–8.54% for Preview confidence, and 10.21–11.67% for the
+  eight-input multiview. Corresponding RSS ranges were 67.7–68.61 MiB,
+  246.0–247.3 MiB, 97.37–97.95 MiB, and 55.93–56.62 MiB;
+- cleanup removed only the seven labelled demo containers, permanent services
+  remained untouched, and the paid test host was verified deallocated.
+
+This is a clean deployment/control and confidence-path smoke. It still does
+not replace a longer transmitted 4K Program and audience A/V-sync gate.
