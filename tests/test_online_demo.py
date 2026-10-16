@@ -203,6 +203,18 @@ class OnlineDemoTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             demo.load_config(self.config_file)
 
+    def test_confidence_stats_are_fresh_within_the_acceptance_window(self):
+        cfg = demo.load_config(self.config_file)
+        commands = demo.commands(cfg, demo.prepare(cfg))
+        encoders = [c for c in commands if "/opt/mxl-operator/mxl_confidence_encoder.py" in c]
+        self.assertEqual(len(encoders), 3)
+        for command in encoders:
+            every = float(command[command.index("--stats-every-s") + 1])
+            # The default 30 s gate must see several new stats lines per encoder.
+            self.assertLessEqual(3 * every, 30)
+        with self.assertRaisesRegex(ValueError, "at least 15 seconds"):
+            demo.acceptance(cfg, 10)
+
     def test_acceptance_evaluator_passes_a_clean_advancing_demo(self):
         source = {"torn": 0, "missing": 0, "live": True}
         before = {
