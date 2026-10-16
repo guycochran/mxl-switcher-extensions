@@ -80,10 +80,13 @@ the LAN or Internet.
 
 Health is loopback-only on port 18120. A green readiness response requires
 all selected source branches to advance, encoded video near the requested
-cadence, advancing encoded audio, fresh mux output at no less than 70% of the
-requested video bitrate, and (for eight-up) the diagnostic clock to advance at
-the encoded cadence. A reconnect remains visible in telemetry even after the
-pipeline recovers.
+cadence, advancing encoded audio, fresh mux output and actual RTMP-sink bytes at
+no less than 70% of the requested video bitrate, and (for eight-up) the
+diagnostic clock to advance at the encoded cadence. A reconnect remains visible
+in telemetry even after the pipeline recovers. A two-frame downstream-leaky
+queue between the compositor and encoder prevents a slow encoder from building
+an ever-older backlog; it sheds stale frames and makes the cadence gate fail
+instead.
 
 Before treating the controller as screenshot-ready, run the read-only sustained
 gate through the same SSH tunnel:
@@ -106,7 +109,7 @@ Capture evidence only after the 30-second gate passes and YouTube Studio says
 `Excellent`:
 
 1. Capture the loopback controller with `8/8`, green `LIVE`, about 29.97 encoded
-   fps, credible mux Mbps, about 29.97 clock fps, zero reconnects, and all eight
+   fps, credible sent Mbps, about 29.97 clock fps, zero reconnects, and all eight
    source rows showing advancing fps.
 2. Capture the YouTube audience player showing all eight intended test tiles
    and the status tile. Do not include the stream key, meeting link, private

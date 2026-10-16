@@ -21,6 +21,7 @@ def sample(ready=True, failed=None, source_fps=29.97, mux_kbps=30000, reconnects
             "metrics": {
                 "video_fps": 29.97,
                 "mux_kbps": mux_kbps,
+                "sent_kbps": mux_kbps,
                 "timecode_fps": 29.97,
                 "source_fps": {f"source_{index}": source_fps for index in range(8)},
             },
@@ -34,6 +35,7 @@ class YouTubeDemoGateTests(unittest.TestCase):
         self.assertTrue(result["passed"])
         self.assertEqual(result["source_fps_min"], 29.97)
         self.assertEqual(result["mux_mbps_min"], 30.0)
+        self.assertEqual(result["sent_mbps_min"], 30.0)
 
     def test_rejects_single_frozen_source_or_low_mux(self):
         result = gate.summarize([
@@ -43,6 +45,7 @@ class YouTubeDemoGateTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertEqual(result["source_fps_min"], 0.0)
         self.assertEqual(result["mux_mbps_min"], 0.009)
+        self.assertEqual(result["sent_mbps_min"], 0.009)
         self.assertEqual(result["failed_checks"], ["all_sources_advancing", "mux_bitrate"])
 
     def test_rejects_reconnect_even_after_recovery(self):

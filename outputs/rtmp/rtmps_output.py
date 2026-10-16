@@ -146,7 +146,10 @@ def pipeline_description(args: argparse.Namespace) -> str:
             "! videoconvert n-threads=8",
             f"! video/x-raw,format=NV12,width=3840,height=2160,framerate={args.rate},colorimetry=bt709",
         ])
-    parts.extend(video_encoder_description(args) + [
+    parts.extend([
+        "! identity name=composed_video silent=true",
+        "! queue name=encode_queue max-size-buffers=2 max-size-time=0 max-size-bytes=0 leaky=downstream silent=true",
+    ] + video_encoder_description(args) + [
         "! video/x-h264,profile=high,stream-format=byte-stream,alignment=au",
         "! identity name=encoded_video silent=true ! h264parse config-interval=-1",
         "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 ! mux.video",
@@ -206,17 +209,23 @@ class Output:
         self.last_error: str | None = None
         self.started_at = time.monotonic()
         self.last_mux_at = 0.0
-        self.counts = {"video": 0, "audio": 0, "mux_buffers": 0, "mux_bytes": 0}
+        self.counts = {
+            "composed": 0, "video": 0, "audio": 0,
+            "mux_buffers": 0, "mux_bytes": 0, "sent_bytes": 0,
+        }
         self.source_counts = {
             f"source_{index}": 0 for index, _source in enumerate(getattr(args, "input", None) or [])
         }
         self.rate_sample_at = self.started_at
-        self.rate_sample_counts = {"video": 0, "audio": 0, "mux_bytes": 0}
+        self.rate_sample_counts = {
+            "composed": 0, "video": 0, "audio": 0, "mux_bytes": 0, "sent_bytes": 0,
+        }
         self.source_rate_sample_counts = dict(self.source_counts)
         self.rates = {"video_fps": 0.0, "audio_buffers_per_second": 0.0, "mux_kbps": 0.0}
         self.source_rates = {name: 0.0 for name in self.source_counts}
         self.timecode_updates = 0
         self.timecode_rate_sample_count = 0
+        self.last_sent_at = 0.0
 
     def _draw_clock(
         self, _overlay: object, context: object, timestamp: int, _duration: int
@@ -267,6 +276,11 @@ class Output:
         pipeline = self.Gst.parse_launch(pipeline_description(self.args))
         sink = pipeline.get_by_name("destination")
         sink.set_property("location", self.url)
+        if sink.find_property("peak-kbps") is not None:
+            sink.set_property(
+                "peak-kbps",
+                self.args.video_bitrate_kbps + (self.args.audio_bitrate_bps // 1000) + 1000,
+            )
         clock_overlay = pipeline.get_by_name("brand_clock")
         if clock_overlay is not None:
             self._cairo = ctypes.CDLL("libcairo.so.2")
@@ -284,7 +298,8 @@ class Output:
             self._cairo.cairo_show_text.argtypes = [pointer, ctypes.c_char_p]
             clock_overlay.connect("draw", self._draw_clock)
         for element_name, metric in (
-            ("encoded_video", "video"), ("encoded_audio", "audio"), ("mux_bytes", "mux")
+            ("composed_video", "composed"), ("encoded_video", "video"),
+            ("encoded_audio", "audio"), ("mux_bytes", "mux")
         ):
             pipeline.get_by_name(element_name).get_static_pad("src").add_probe(
                 self.Gst.PadProbeType.BUFFER, self._probe(metric)
@@ -317,6 +332,19 @@ class Output:
             return self.Gst.PadProbeReturn.OK
 
         return count
+
+    def _sink_bytes(self) -> int | None:
+        """Return bytes acknowledged by the RTMP sink, not merely bytes muxed."""
+        pipeline = self.pipeline
+        if pipeline is None:
+            return None
+        sink = pipeline.get_by_name("destination")
+        if sink is None or sink.find_property("stats") is None:
+            return None
+        stats = sink.get_property("stats")
+        if stats is None or not stats.has_field("out-bytes-total"):
+            return None
+        return int(stats.get_value("out-bytes-total"))
 
     def run(self) -> int:
         import gi
@@ -363,9 +391,21 @@ class Output:
         with self.lock:
             now = time.monotonic()
             mux_age = None if not self.last_mux_at else now - self.last_mux_at
+            try:
+                sent_bytes = self._sink_bytes()
+            except Exception:
+                sent_bytes = None
+            if sent_bytes is not None:
+                if sent_bytes > self.counts["sent_bytes"]:
+                    self.last_sent_at = now
+                self.counts["sent_bytes"] = sent_bytes
+            sent_age = None if not self.last_sent_at else now - self.last_sent_at
             elapsed = now - self.rate_sample_at
             if elapsed >= 1.0:
                 self.rates = {
+                    "composed_fps": (
+                        self.counts["composed"] - self.rate_sample_counts["composed"]
+                    ) / elapsed,
                     "video_fps": (self.counts["video"] - self.rate_sample_counts["video"]) / elapsed,
                     "audio_buffers_per_second": (
                         self.counts["audio"] - self.rate_sample_counts["audio"]
@@ -374,12 +414,18 @@ class Output:
                         (self.counts["mux_bytes"] - self.rate_sample_counts["mux_bytes"])
                         * 8 / elapsed / 1000
                     ),
+                    "sent_kbps": (
+                        (self.counts["sent_bytes"] - self.rate_sample_counts["sent_bytes"])
+                        * 8 / elapsed / 1000
+                    ),
                 }
                 self.rate_sample_at = now
                 self.rate_sample_counts = {
+                    "composed": self.counts["composed"],
                     "video": self.counts["video"],
                     "audio": self.counts["audio"],
                     "mux_bytes": self.counts["mux_bytes"],
+                    "sent_bytes": self.counts["sent_bytes"],
                 }
                 self.source_rates = {
                     name: (count - self.source_rate_sample_counts[name]) / elapsed
@@ -400,6 +446,8 @@ class Output:
                 "audio_advancing": self.rates["audio_buffers_per_second"] >= 20.0,
                 "mux_fresh": mux_age is not None and mux_age < 5.0,
                 "mux_bitrate": self.rates["mux_kbps"] >= minimum_mux_kbps,
+                "destination_fresh": sent_age is not None and sent_age < 5.0,
+                "destination_bitrate": self.rates.get("sent_kbps", 0.0) >= minimum_mux_kbps,
                 "all_sources_advancing": all(
                     rate >= minimum_source_fps for rate in self.source_rates.values()
                 ),
@@ -423,11 +471,13 @@ class Output:
                 "metrics": {
                     **self.counts,
                     "last_mux_age_seconds": None if mux_age is None else round(mux_age, 3),
+                    "last_sent_age_seconds": None if sent_age is None else round(sent_age, 3),
                     "video_bitrate_kbps": self.args.video_bitrate_kbps,
                     "audio_bitrate_bps": self.args.audio_bitrate_bps,
                     "audio_rate_hz": self.args.audio_rate_hz,
                     "resolution": "3840x2160", "frame_rate": self.args.rate,
                     "queue_bound_ns": QUEUE_NS,
+                    "encode_queue_buffers": 2,
                     "timecode_updates": self.timecode_updates,
                     "source_frames": dict(self.source_counts),
                     "source_fps": {

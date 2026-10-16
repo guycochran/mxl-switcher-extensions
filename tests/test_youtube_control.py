@@ -55,7 +55,7 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertNotIn("NVENC H.264 High", body)
         self.assertIn("20M", body)
         self.assertIn("encoded fps", body)
-        self.assertIn("mux Mbps", body)
+        self.assertIn("sent Mbps", body)
         self.assertIn("all demo gates passing", body)
 
     def test_discovery_can_pin_an_instance_by_flow_identity(self):

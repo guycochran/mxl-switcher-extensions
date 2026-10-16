@@ -39,6 +39,9 @@ class RTMPSOutputTests(unittest.TestCase):
         self.assertIn("strict-gop=true", description)
         self.assertIn("h264parse config-interval=-1", description)
         self.assertIn("avenc_aac bitrate=128000", description)
+        self.assertIn("identity name=composed_video", description)
+        self.assertIn("queue name=encode_queue max-size-buffers=2", description)
+        self.assertIn("leaky=downstream", description)
         self.assertIn("audio/x-raw,rate=44100,channels=2", description)
         self.assertIn("rtmp2sink name=destination", description)
         self.assertNotIn("rtmpsink name=destination", description)
@@ -113,25 +116,30 @@ class RTMPSOutputTests(unittest.TestCase):
             output = rtmps.Output(args, "abc-def")
         output.state = "streaming"
         output.last_mux_at = 101.9
-        output.counts.update(video=60, audio=100, mux_buffers=60, mux_bytes=7_500_000)
+        output.counts.update(composed=60, video=60, audio=100, mux_buffers=60, mux_bytes=7_500_000)
         output.source_counts = {name: 60 for name in output.source_counts}
         output.timecode_updates = 60
-        with mock.patch.object(rtmps.time, "monotonic", return_value=102.0):
+        with mock.patch.object(output, "_sink_bytes", return_value=7_500_000), \
+             mock.patch.object(rtmps.time, "monotonic", return_value=102.0):
             snapshot = output.snapshot()
         self.assertTrue(snapshot["ready"])
         self.assertEqual(snapshot["failed_checks"], [])
         self.assertAlmostEqual(snapshot["metrics"]["video_fps"], 30.0)
         self.assertAlmostEqual(snapshot["metrics"]["mux_kbps"], 30000.0)
+        self.assertAlmostEqual(snapshot["metrics"]["sent_kbps"], 30000.0)
         self.assertTrue(all(rate == 30.0 for rate in snapshot["metrics"]["source_fps"].values()))
 
         output.source_counts["source_4"] = 60
-        output.counts.update(video=120, audio=200, mux_buffers=120, mux_bytes=15_000_000)
+        output.counts.update(
+            composed=120, video=120, audio=200, mux_buffers=120, mux_bytes=15_000_000
+        )
         output.timecode_updates = 120
         output.last_mux_at = 103.9
         for name in output.source_counts:
             if name != "source_4":
                 output.source_counts[name] = 120
-        with mock.patch.object(rtmps.time, "monotonic", return_value=104.0):
+        with mock.patch.object(output, "_sink_bytes", return_value=15_000_000), \
+             mock.patch.object(rtmps.time, "monotonic", return_value=104.0):
             snapshot = output.snapshot()
         self.assertFalse(snapshot["ready"])
         self.assertIn("all_sources_advancing", snapshot["failed_checks"])
@@ -144,12 +152,14 @@ class RTMPSOutputTests(unittest.TestCase):
             output = rtmps.Output(args, "abc-def")
         output.state = "streaming"
         output.last_mux_at = 201.9
-        output.counts.update(video=60, audio=100, mux_buffers=60, mux_bytes=250_000)
+        output.counts.update(composed=60, video=60, audio=100, mux_buffers=60, mux_bytes=250_000)
         output.source_counts = {name: 60 for name in output.source_counts}
-        with mock.patch.object(rtmps.time, "monotonic", return_value=202.0):
+        with mock.patch.object(output, "_sink_bytes", return_value=250_000), \
+             mock.patch.object(rtmps.time, "monotonic", return_value=202.0):
             snapshot = output.snapshot()
         self.assertFalse(snapshot["ready"])
         self.assertIn("mux_bitrate", snapshot["failed_checks"])
+        self.assertIn("destination_bitrate", snapshot["failed_checks"])
         self.assertIn("diagnostic_clock_advancing", snapshot["failed_checks"])
 
     def test_stream_key_requires_private_regular_file(self):
