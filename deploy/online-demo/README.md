@@ -29,7 +29,7 @@ reboot or VM power-up never revives them against a previous meeting's flows.
   to replace one unless `--force` is explicit.
 - `doctor`, `prepare`, `plan`, and `status` are read-only outside the private
   state directory.
-- `bootstrap`, `launch`, and `stop` require `--apply`.
+- `bootstrap`, `launch`, `up`, `stop`, and `down` require `--apply`.
 - Launch refuses occupied ports, existing same-name containers, stale/missing
   source flows, non-loopback operator endpoints, or fewer than the requested
   paired video/audio sources.
@@ -90,7 +90,9 @@ For first-time operators, the supported short path is `init`, `doctor`, `up
 --apply`, `check`, and `down --apply`. The longer commands above remain
 available for engineering diagnosis and controlled rebuilds. See the
 [top-level quickstart](../../QUICKSTART.md) and
-[troubleshooting guide](TROUBLESHOOTING.md).
+[troubleshooting guide](TROUBLESHOOTING.md). The licensed image is an
+operator-supplied prerequisite with a machine-checked
+[base-image contract](BASE_IMAGE.md); `mxl-lab:latest` is not a public image.
 
 `acceptance` is a read-only observation gate for a running deployment. It
 captures two snapshots, requires every owned service to remain running with

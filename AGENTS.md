@@ -23,8 +23,9 @@ Produce a guarded ZoomISO Cloud → MXL Core demonstration with:
   chat output.
 - Do not automate Zoom authorization, participant mapping, or entry of the
   YouTube stream key. Ask the human to perform those steps.
-- Run `doctor`, then `bootstrap --apply`, then `launch --apply`; do not improvise
-  a second deployment path.
+- Run `init`, `doctor`, `up --apply`, `check`, and `down --apply`; do not
+  improvise a second deployment path. The longer bootstrap/launch commands are
+  engineering diagnostics, not the first-time operator workflow.
 - Keep the Skin and YouTube controller on loopback and use the SSH tunnel from
   `QUICKSTART.md`.
 - Do not stop or replace ZoomISO, EasyMXL, meetings, Docker, networking, or
