@@ -22,8 +22,10 @@ CPU path.
 
 The default image name `mxl-lab:latest` is a local lab convention, not a public
 download. Before using another tag, read the exact
-[licensed base-image contract](deploy/online-demo/BASE_IMAGE.md). `doctor`
-checks that contract inside the image before it permits a build or launch.
+[licensed prerequisite onboarding guide](deploy/online-demo/PREREQUISITES.md)
+and [base-image contract](deploy/online-demo/BASE_IMAGE.md). The onboarding
+guide defines what the operator must obtain and stage; `doctor` checks the
+image contract inside the image before it permits a build or launch.
 
 ## 1. Clone and initialize
 

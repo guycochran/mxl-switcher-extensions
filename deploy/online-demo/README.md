@@ -93,6 +93,9 @@ available for engineering diagnosis and controlled rebuilds. See the
 [troubleshooting guide](TROUBLESHOOTING.md). The licensed image is an
 operator-supplied prerequisite with a machine-checked
 [base-image contract](BASE_IMAGE.md); `mxl-lab:latest` is not a public image.
+The [licensed prerequisite onboarding guide](PREREQUISITES.md) covers the
+authorized-image, ZoomISO, host, security, and cloud handoff steps that must be
+complete before this launcher takes control.
 
 `acceptance` is a read-only observation gate for a running deployment. It
 captures two snapshots, requires every owned service to remain running with

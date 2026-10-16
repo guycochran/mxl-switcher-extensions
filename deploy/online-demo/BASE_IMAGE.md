@@ -30,3 +30,7 @@ is the supported compatibility test; a matching image name alone is not proof.
 For a clean-host rehearsal, load or build this licensed image before running
 `init`, and record that it was a preloaded prerequisite. Do not publish the
 image or infer redistribution permission from a successful local run.
+
+For the complete operator-side staging checklist, credential boundary, and
+provider-neutral handoff into `init`, see
+[`PREREQUISITES.md`](PREREQUISITES.md).

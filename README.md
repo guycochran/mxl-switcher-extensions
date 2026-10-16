@@ -6,6 +6,9 @@ Optional input, output, recording, and deployment integrations for
 For the guarded ZoomISO-to-Core-to-YouTube demonstration—including the
 ATEM-style operator Skin and one encoded Program/Preview/multiview confidence
 stack—start with the [end-to-end quickstart](QUICKSTART.md).
+Operators beginning with a new host should first read the
+[licensed prerequisite onboarding guide](deploy/online-demo/PREREQUISITES.md),
+which states exactly what this public repository can and cannot install.
 AI-assisted operators should also read the repository's
 [agent operator brief](AGENTS.md); it captures the safety boundary and proof
 required without relying on private project history.
