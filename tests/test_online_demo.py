@@ -244,13 +244,81 @@ class OnlineDemoTests(unittest.TestCase):
 
     def test_up_runs_guarded_sequence_and_aliases_are_simple(self):
         cfg = demo.load_config(self.config_file)
+        order = mock.Mock()
         with mock.patch.object(demo, "doctor", return_value=0) as doctor, \
+             mock.patch.object(demo, "ensure_no_conflicts") as conflicts, \
              mock.patch.object(demo, "bootstrap") as bootstrap, \
              mock.patch.object(demo, "launch") as launch:
+            order.attach_mock(conflicts, "conflicts")
+            order.attach_mock(bootstrap, "bootstrap")
             demo.up(cfg, apply=True)
         doctor.assert_called_once_with(cfg)
         bootstrap.assert_called_once_with(cfg, apply=True)
         launch.assert_called_once_with(cfg, apply=True)
+        # Leftover containers and busy ports are refused before slow image builds.
+        self.assertEqual([c[0] for c in order.mock_calls], ["conflicts", "bootstrap"])
+
+    def test_unreadable_domain_gives_the_next_safe_action(self):
+        # Docker-group users cannot traverse /var/lib/docker; Python 3.12 raises
+        # PermissionError from Path.is_dir there instead of returning False.
+        denied = mock.patch.object(demo.pathlib.Path, "is_dir",
+                                   side_effect=PermissionError(13, "Permission denied"))
+        cfg = demo.load_config(self.config_file)
+        with denied:
+            with self.assertRaisesRegex(RuntimeError, "sudo python3"):
+                demo.discover(cfg)
+        target = self.root / "generated.json"
+        with mock.patch.object(demo, "detect_docker_command", return_value=["docker"]), \
+             mock.patch.object(demo, "discover_domain_volumes", return_value=["zoomiso-domain"]), \
+             mock.patch.object(demo, "volume_mountpoint", return_value=str(self.domain)), \
+             denied:
+            with self.assertRaisesRegex(RuntimeError, "not readable.*sudo python3"):
+                demo.init_config(target, domain_volume=None, base_image="mxl-lab:latest",
+                                 source_count=4, force=False)
+        self.assertFalse(target.exists())
+
+    def test_doctor_requires_only_documented_executables(self):
+        cfg = demo.load_config(self.config_file)
+        checked = []
+
+        def which(name):
+            checked.append(name)
+            return "/usr/bin/" + name
+
+        with mock.patch.object(demo.shutil, "which", side_effect=which), \
+             mock.patch.object(demo.subprocess, "run",
+                               return_value=demo.subprocess.CompletedProcess([], 1)), \
+             mock.patch.object(demo, "discover", return_value=[]):
+            demo.doctor(cfg)
+        self.assertEqual(checked, ["docker", "git"])
+
+    def test_launch_removes_a_deployment_whose_container_exits_after_start(self):
+        cfg = demo.load_config(self.config_file)
+        resolved = demo.prepare(cfg)
+        removed = []
+
+        def run(command, *args, **kwargs):
+            if command[1] == "inspect" and "{{.State.Status}}|{{.RestartCount}}" in command:
+                name = command[-1]
+                status = "exited|0" if name.endswith("multiview-confidence") else "running|0"
+                return demo.subprocess.CompletedProcess(command, 0, status + "\n", "")
+            if command[1] == "logs":
+                return demo.subprocess.CompletedProcess(command, 0, "missing flow\n", "")
+            if command[1] == "rm":
+                removed.append(command)
+            return demo.subprocess.CompletedProcess(command, 0, "", "")
+
+        with mock.patch.object(demo, "ensure_launchable"), \
+             mock.patch.object(demo, "prepare", return_value=resolved), \
+             mock.patch.object(demo, "wait_url"), \
+             mock.patch.object(demo.time, "sleep"), \
+             mock.patch.object(demo.subprocess, "run", side_effect=run):
+            with self.assertRaisesRegex(RuntimeError, "test-demo-multiview-confidence \\(exited\\|0\\)"):
+                demo.launch(cfg, apply=True)
+        self.assertEqual(len(removed), 1)
+        self.assertEqual(len(removed[0]) - 3, 7, "all seven started containers must be removed")
+        log = pathlib.Path(cfg["state_dir"]) / "launch-failure-test-demo-multiview-confidence.log"
+        self.assertEqual(log.read_text(), "missing flow\n")
         self.assertEqual(demo.parse_args(["check"]).config, pathlib.Path("demo-config.json"))
         self.assertEqual(demo.parse_args(["down"]).command, "down")
 

@@ -106,6 +106,26 @@ def load_config(path: pathlib.Path) -> dict:
     return cfg
 
 
+ACCOUNT_HINT = (
+    "run init and every later lifecycle command with one account that can read "
+    "it, for example `sudo python3 deploy/online-demo/mxl_demo.py init`"
+)
+# Seconds to let freshly started containers settle before confirming none exited.
+LAUNCH_SETTLE_SECONDS = 3.0
+
+
+def readable_dir(path: pathlib.Path) -> bool:
+    """True only for a directory this account can list.
+
+    Docker volumes live below a root-only directory by default. Python 3.12's
+    ``Path.is_dir`` raises PermissionError there instead of returning False.
+    """
+    try:
+        return path.is_dir() and os.access(path, os.R_OK | os.X_OK)
+    except PermissionError:
+        return False
+
+
 def docker_usable(command: list[str]) -> bool:
     return subprocess.run([*command, "info"], stdout=subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL).returncode == 0
@@ -165,11 +185,8 @@ def init_config(path: pathlib.Path, *, domain_volume: str | None,
                 f"(candidates: {detail})"
             )
     mountpoint = volume_mountpoint(docker_command, domain_volume)
-    if not pathlib.Path(mountpoint).is_dir():
-        raise RuntimeError(
-            f"MXL volume mountpoint is not readable: {mountpoint}. Run init and "
-            "the later lifecycle commands with one account that can read it."
-        )
+    if not readable_dir(pathlib.Path(mountpoint)):
+        raise RuntimeError(f"MXL volume mountpoint is not readable: {mountpoint}; {ACCOUNT_HINT}")
     if not image_exists({"docker": docker_command}, base_image):
         raise RuntimeError(
             f"licensed base image {base_image!r} is not installed; load/build it "
@@ -226,8 +243,8 @@ def container_owner(cfg: dict, name: str) -> str | None:
 
 def discover(cfg: dict, active_seconds: float = 30.0) -> list[dict]:
     domain = pathlib.Path(cfg["domain_host_path"])
-    if not domain.is_dir():
-        raise RuntimeError(f"MXL domain is not readable: {domain}")
+    if not readable_dir(domain):
+        raise RuntimeError(f"MXL domain is not readable: {domain}; {ACCOUNT_HINT}")
     now = time.time()
     videos: dict[tuple[int, str], tuple[float, dict]] = {}
     audio: dict[tuple[int, str], tuple[float, dict]] = {}
@@ -373,7 +390,7 @@ def port_free(port: int) -> bool:
 def doctor(cfg: dict, strict_images: bool = False) -> int:
     failures = 0
     print("MXL online-demo doctor")
-    for program in (cfg["docker"][0], "git", "curl"):
+    for program in (cfg["docker"][0], "git"):
         ok = shutil.which(program) is not None
         print(f"  {'PASS' if ok else 'FAIL'} executable {program}")
         failures += not ok
@@ -453,11 +470,19 @@ def bootstrap(cfg: dict, apply: bool) -> None:
 def ensure_launchable(cfg: dict) -> None:
     if doctor(cfg, strict_images=True):
         raise RuntimeError("preflight failed")
+    ensure_no_conflicts(cfg)
+
+
+def ensure_no_conflicts(cfg: dict) -> None:
+    """Refuse existing demo containers or occupied ports before any slow work."""
     for suffix in OWNED_SUFFIXES:
         name = container_name(cfg, suffix)
         if subprocess.run(docker(cfg, "inspect", name), stdout=subprocess.DEVNULL,
                           stderr=subprocess.DEVNULL).returncode == 0:
-            raise RuntimeError(f"refusing existing container {name}; run stop explicitly")
+            raise RuntimeError(
+                f"refusing existing container {name}; run `down --apply` if it is this "
+                "demo's, or choose another deployment_id"
+            )
     for key in (
         "core_port", "skin_port", "youtube_port", "rtmp_port",
         "mediamtx_api_port", "webrtc_port", "ice_tcp_port",
@@ -555,6 +580,7 @@ def launch(cfg: dict, apply: bool) -> None:
                 wait_url(f"http://127.0.0.1:{cfg['mediamtx_api_port']}/v3/config/global/get", 20)
         wait_url(f"http://127.0.0.1:{cfg['skin_port']}/api/skin/state", 20)
         wait_url(f"http://127.0.0.1:{cfg['youtube_port']}/api/state", 20)
+        verify_started(cfg, started)
     except Exception:
         if started:
             subprocess.run(docker(cfg, "rm", "-f", *reversed(started)), check=False)
@@ -562,11 +588,49 @@ def launch(cfg: dict, apply: bool) -> None:
     print("READY: operator Skin and YouTube controller are loopback-only")
 
 
+def verify_started(cfg: dict, names: list[str]) -> None:
+    """Fail the launch if any started container has already exited or restarted.
+
+    The four HTTP waits cover Core, MediaMTX, Skin and YouTube only; a confidence
+    encoder can exit at once (for example on a missing flow) while READY prints.
+    Its log tail is saved privately before the caller removes the containers.
+    """
+    time.sleep(LAUNCH_SETTLE_SECONDS)
+    failed = []
+    for name in names:
+        proc = subprocess.run(
+            docker(cfg, "inspect", "-f", "{{.State.Status}}|{{.RestartCount}}", name),
+            text=True, capture_output=True,
+        )
+        value = proc.stdout.strip() if proc.returncode == 0 else "missing"
+        if value != "running|0":
+            failed.append((name, value))
+    if not failed:
+        return
+    state = pathlib.Path(cfg["state_dir"])
+    state.mkdir(parents=True, exist_ok=True)
+    saved = []
+    for name, _value in failed:
+        logs = subprocess.run(docker(cfg, "logs", "--tail", "100", name),
+                              text=True, capture_output=True)
+        target = state / f"launch-failure-{name}.log"
+        target.write_text(logs.stdout + logs.stderr, encoding="utf-8")
+        saved.append(str(target))
+    detail = ", ".join(f"{name} ({value})" for name, value in failed)
+    raise RuntimeError(
+        f"started containers did not stay running: {detail}. Private log tails: "
+        + ", ".join(saved) + ". The partial deployment was removed; fix the cause "
+        "and rerun `up --apply`."
+    )
+
+
 def up(cfg: dict, apply: bool) -> None:
     if not apply:
         raise RuntimeError("up builds images and starts containers; rerun with --apply")
     if doctor(cfg):
         raise RuntimeError("doctor failed; fix the reported item before starting")
+    # Check for leftovers and busy ports before spending minutes on image builds.
+    ensure_no_conflicts(cfg)
     bootstrap(cfg, apply=True)
     launch(cfg, apply=True)
 
