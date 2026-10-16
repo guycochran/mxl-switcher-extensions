@@ -83,6 +83,11 @@ class RTMPSOutputTests(unittest.TestCase):
             self.assertIn("compositor name=mix", description)
             self.assertIn("ignore-inactive-pads=true latency=100000000", description)
             self.assertIn("mix.sink_8", description)
+            self.assertIn("sink_8::xpos=2560", description)
+            self.assertIn("sink_8::ypos=1440", description)
+            self.assertIn("sink_8::width=1280", description)
+            self.assertIn("sink_8::height=720", description)
+            self.assertIn("sink_8::zorder=9", description)
             self.assertIn(
                 "videotestsrc is-live=true pattern=ball animation-mode=frames motion=sweep",
                 description,

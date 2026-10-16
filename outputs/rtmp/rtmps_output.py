@@ -163,6 +163,14 @@ def pipeline_description(args: argparse.Namespace) -> str:
                 "sink_4::xpos=0", "sink_4::ypos=0",
                 "sink_4::width=3840", "sink_4::height=2160", "sink_4::zorder=0",
             ])
+        elif len(inputs) == 8:
+            # The diagnostic source is the ninth pad in the 3x3 canvas.
+            # Explicit placement prevents its default (0, 0) position from
+            # covering source 1 and leaving the intended status cell black.
+            parts.extend([
+                "sink_8::xpos=2560", "sink_8::ypos=1440",
+                "sink_8::width=1280", "sink_8::height=720", "sink_8::zorder=9",
+            ])
         parts.append(
             f"! video/x-raw,format=BGRA,width=3840,height=2160,framerate={args.rate}"
         )
