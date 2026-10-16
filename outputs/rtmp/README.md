@@ -131,22 +131,16 @@ non-secret health state and latency.
 Only after those gates pass should the extension move from `prototype` to
 `candidate`.
 
-## Real-service demonstration — 2026-10-16
+## Real-service transport gate — 2026-10-16
 
-The CPU-only eight-source profile completed an unlisted end-to-end YouTube
-demonstration on a 32-vCPU, 128 GiB general-purpose cloud VM with no GPU:
+An unlisted CPU-only YouTube run on a 32-vCPU, 128 GiB general-purpose cloud
+VM with no GPU proved that the x264/AAC/FLV/RTMPS path could deliver good
+picture, sound, and smoothly moving diagnostic timecode to the audience
+player. It did **not** prove the intended eight-participant composition: the
+operator did not see the Zoom participants in the YouTube output.
 
-- eight active ZoomISO MXL video outputs were composed directly into the
-  3840x2160p30 3x3 canvas (eight pictures plus the status tile);
-- the output used the documented x264 H.264 High 30,000 Kbps target, stereo
-  AAC, FLV mux, and RTMPS profile;
-- the controller, ZoomISO instance, and temporary reference publishers all
-  remained at zero container restarts during the observed run; and
-- the operator confirmed from the public YouTube player that picture and
-  sound were good and the visible timecode moved smoothly.
-
-This is a successful real-service demonstration, not yet a sustained
-acceptance result. The run did not retain a synchronized in-stream container
-resource sample or an independent decoded-frame/audio analysis, so no final
-CPU-efficiency, encoded-bitrate, loss, latency, or A/V-offset claim is made
-from it. Those measurements remain part of the promotion sequence above.
+Treat this run as a transport-only success and an eight-source composition
+failure/unverified gate. Do not describe it as an end-to-end Zoom participant
+demonstration. The next gate must visibly identify all eight live tiles at the
+controller and audience outputs, reject diagnostic or stale source selection,
+and capture synchronized resource and receiver telemetry before shutdown.
