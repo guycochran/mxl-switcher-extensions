@@ -59,7 +59,7 @@ def pipeline_description(args: argparse.Namespace) -> str:
         "flvmux name=mux streamable=true skip-backwards-streams=true",
         "! identity name=mux_bytes silent=true",
         "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0",
-        "! rtmpsink name=destination sync=false async=false",
+        "! rtmp2sink name=destination sync=false async=false",
     ]
     inputs = getattr(args, "input", None) or []
     if inputs:
@@ -166,7 +166,7 @@ class Output:
     def _start(self) -> None:
         pipeline = self.Gst.parse_launch(pipeline_description(self.args))
         sink = pipeline.get_by_name("destination")
-        sink.set_property("location", self.url + " live=1")
+        sink.set_property("location", self.url)
         for element_name, metric in (
             ("encoded_video", "video"), ("encoded_audio", "audio"), ("mux_bytes", "mux")
         ):
@@ -205,8 +205,9 @@ class Output:
                     if message is None:
                         continue
                     if message.type == Gst.MessageType.ERROR:
-                        error, _debug = message.parse_error()
-                        raise RuntimeError(self._redact(error.message))
+                        error, debug = message.parse_error()
+                        detail = error.message if not debug else f"{error.message} ({debug})"
+                        raise RuntimeError(self._redact(detail))
                     raise RuntimeError("pipeline reached EOS")
                 backoff = 1.0
             except Exception as error:

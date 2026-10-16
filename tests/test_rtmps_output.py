@@ -37,7 +37,8 @@ class RTMPSOutputTests(unittest.TestCase):
         self.assertIn("h264parse config-interval=-1", description)
         self.assertIn("avenc_aac bitrate=128000", description)
         self.assertIn("audio/x-raw,rate=44100,channels=2", description)
-        self.assertIn("rtmpsink name=destination", description)
+        self.assertIn("rtmp2sink name=destination", description)
+        self.assertNotIn("rtmpsink name=destination", description)
         self.assertNotIn("youtube.com", description)
         self.assertNotIn("secret", description)
 

@@ -4,7 +4,8 @@ Direct Program Master encode for services such as YouTube.
 
 **Maturity: prototype.** The executable path reads MXL video and audio directly,
 uses hardware H.264 encoding, and sets the RTMPS destination through the
-GStreamer API after reading a mode-0600 secret file. The original Switcher's
+GStreamer API on the modern `rtmp2sink` implementation after reading a
+mode-0600 secret file. The original Switcher's
 RTSP-derived, timestamp-regenerating path is retained only as a lesson.
 
 The direct multi-view mode builds a 3840x2160p30 canvas from four or eight MXL
