@@ -150,10 +150,11 @@ and capture synchronized resource and receiver telemetry before shutdown.
 The follow-up rebuild selected eight distinct live ZoomISO MXL writers and the
 loopback-only controller reported advancing video and audio for a CPU-encoded
 3840x2160, 30000/1001-fps, 30 Mbps RTMPS output. The two public-safe captures
-below intentionally omit the stream key, meeting details, participant
-identities, private addresses, and flow identifiers.
+below intentionally omit the stream key, meeting details, private addresses,
+flow identifiers, and a QR code embedded in one test source. The visible
+people are controlled synthetic participants from the project's test meeting.
 
-![Eight active ZoomISO MXL source slots, with participant imagery redacted](../../docs/assets/zoomiso-mxl-eight-source-public-proof.jpg)
+![Eight active ZoomISO MXL test source slots](../../docs/assets/zoomiso-mxl-eight-source-proof.jpg)
 
 ![Loopback-only YouTube 4K controller showing eight sources and the CPU signal chain](../../docs/assets/youtube-4k-control-live.jpg)
 
