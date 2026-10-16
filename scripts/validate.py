@@ -65,6 +65,10 @@ def profile(path: pathlib.Path) -> None:
     for selected in item["extensions"]:
         target = ROOT / selected
         require(target.is_dir(), f"{path}: missing extension directory {selected}")
+        require(
+            (target / "extension.json").is_file(),
+            f"{path}: missing extension manifest {selected}/extension.json",
+        )
 
 
 def main() -> int:

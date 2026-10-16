@@ -48,6 +48,29 @@ class ManifestValidationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "health.bind_scope"):
                 validate.extension(self.write(directory, manifest))
 
+    def test_profiles_cannot_select_undocumented_directories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            old_root = validate.ROOT
+            try:
+                validate.ROOT = pathlib.Path(directory)
+                selected = validate.ROOT / "outputs" / "example"
+                selected.mkdir(parents=True)
+                profile = {
+                    "schema_version": 1,
+                    "name": "example-profile",
+                    "audience": "test",
+                    "core": {"repository": "https://example.invalid/core", "ref": "main"},
+                    "extensions": ["outputs/example"],
+                }
+                path = validate.ROOT / "profile.json"
+                path.write_text(json.dumps(profile))
+                with self.assertRaisesRegex(ValueError, "missing extension manifest"):
+                    validate.profile(path)
+                (selected / "extension.json").write_text("{}")
+                validate.profile(path)
+            finally:
+                validate.ROOT = old_root
+
     def test_health_paths_and_loopback_scope_are_validated(self):
         with tempfile.TemporaryDirectory() as directory:
             manifest = self.manifest()
