@@ -162,6 +162,36 @@ class RTMPSOutputTests(unittest.TestCase):
         self.assertIn("destination_bitrate", snapshot["failed_checks"])
         self.assertIn("diagnostic_clock_advancing", snapshot["failed_checks"])
 
+    def test_readiness_requires_audio_at_aac_frame_cadence(self):
+        args = self.args()
+        args.audio_rate_hz = 48000
+        with mock.patch.object(rtmps.time, "monotonic", return_value=300.0):
+            output = rtmps.Output(args, "abc-def")
+        output.state = "streaming"
+
+        def window(end, audio):
+            output.last_mux_at = end - 0.1
+            output.counts.update(
+                composed=output.counts["composed"] + 60,
+                video=output.counts["video"] + 60,
+                audio=output.counts["audio"] + audio,
+                mux_buffers=output.counts["mux_buffers"] + 60,
+                mux_bytes=output.counts["mux_bytes"] + 7_500_000,
+            )
+            with mock.patch.object(output, "_sink_bytes", return_value=output.counts["mux_bytes"]), \
+                 mock.patch.object(rtmps.time, "monotonic", return_value=end):
+                return output.snapshot()
+
+        # 48 kHz AAC is 46.875 frames/s; two seconds is about 94 frames.
+        snapshot = window(302.0, 94)
+        self.assertNotIn("audio_advancing", snapshot["failed_checks"])
+
+        # Half-rate Program audio advances, but it is not a healthy 48 kHz stream.
+        snapshot = window(304.0, 47)
+        self.assertFalse(snapshot["ready"])
+        self.assertIn("audio_advancing", snapshot["failed_checks"])
+        self.assertAlmostEqual(snapshot["metrics"]["minimum_audio_buffers_per_second"], 42.188)
+
     def test_stream_key_requires_private_regular_file(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "key"

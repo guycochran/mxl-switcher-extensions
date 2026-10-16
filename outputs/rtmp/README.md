@@ -74,6 +74,11 @@ running multiple identically named ZoomISO instances, repeat `--preferred-flow`
 with the intended instance's four or eight video flow IDs to prevent a source
 number from switching between writers.
 
+The controller refuses to start, and reports `audio_ready: false`, unless the
+configured Program audio flow exists in the domain as `audio/float32` and is
+being written within the same activity window as the video sources. This keeps
+a stale or rotated audio flow ID from reaching `mxlsrc`.
+
 When containerized, bind the process to `0.0.0.0` with the explicit
 `--container-bind` acknowledgement, but publish it only as
 `127.0.0.1:18121:18121` on the media host. Never publish the control window on
@@ -81,7 +86,8 @@ the LAN or Internet.
 
 Health is loopback-only on port 18120. A green readiness response requires
 all selected source branches to advance, encoded video near the requested
-cadence, advancing encoded audio, fresh mux output and actual RTMP-sink bytes at
+cadence, encoded AAC frames at no less than 90% of the Program sample rate's
+frame cadence (46.875 frames/s at 48 kHz), fresh mux output and actual RTMP-sink bytes at
 no less than 70% of the requested video bitrate, and (for eight-up) the
 diagnostic clock to advance at the encoded cadence. A reconnect remains visible
 in telemetry even after the pipeline recovers. A two-frame downstream-leaky
