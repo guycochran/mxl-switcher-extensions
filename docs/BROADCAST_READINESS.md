@@ -31,8 +31,9 @@ profile. They remain independent promotion tracks.
 - All unit, schema, syntax, secret-redaction, and profile checks pass.
 - Every queue has a bound and an explicit overflow policy.
 - Output defaults preserve Program's 48 kHz audio rate.
-- Health distinguishes source cadence, composed cadence, encoded cadence,
-  audio advancement, mux advancement, destination bytes, and reconnects.
+- Health distinguishes source cadence, source lateness, composed cadence,
+  encoded cadence, audio advancement, send-queue backlog, mux advancement,
+  destination bytes, and reconnects.
 
 ### 2. Local receiver gate
 

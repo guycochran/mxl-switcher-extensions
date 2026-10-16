@@ -103,6 +103,9 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertIn("sent Mbps", body)
         self.assertIn("CPU cores", body)
         self.assertIn("RSS MiB", body)
+        self.assertIn("AAC buffers/s", body)
+        self.assertIn("send queue ms", body)
+        self.assertIn("source late ms", body)
         self.assertIn("all demo gates passing", body)
 
     def test_discovery_can_pin_an_instance_by_flow_identity(self):
@@ -125,6 +128,7 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertEqual(args.active_seconds, 30.0)
         self.assertEqual(args.audio_rate_hz, 48000)
         self.assertEqual(args.rate, "30000/1001")
+        self.assertEqual(args.video_encoder, "x264enc")
         self.assertIsNone(args.preferred_flow)
 
 

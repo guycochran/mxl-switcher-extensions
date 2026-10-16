@@ -22,6 +22,11 @@ from youtube_8up_canvas import Input, parse_input, tile_layout, write_label_png
 
 
 QUEUE_NS = 2_000_000_000
+COMPOSITOR_LATENCY_NS = 100_000_000
+MUX_LATENCY_NS = 300_000_000
+SEND_QUEUE_READY_NS = 500_000_000
+SOURCE_LATENESS_READY_NS = COMPOSITOR_LATENCY_NS - 10_000_000
+RTMP_CHUNK_SIZE = 4096
 # AAC-LC emits one encoded buffer per 1024 PCM samples per channel.
 AAC_FRAME_SAMPLES = 1024
 
@@ -45,6 +50,12 @@ def rate_as_float(rate: str) -> float:
     if numerator <= 0 or denominator <= 0:
         raise ValueError("frame rate must be a positive fraction")
     return numerator / denominator
+
+
+def rtmp_peak_kbps(args: argparse.Namespace) -> int:
+    """Allow a stalled live connection to drain without creating standing latency."""
+    total_kbps = args.video_bitrate_kbps + (args.audio_bitrate_bps // 1000)
+    return total_kbps * 2
 
 
 def running_timecode(elapsed: float, rate: str) -> str:
@@ -127,15 +138,18 @@ def destination_url(server_url: str, stream_key: str) -> str:
 def pipeline_description(args: argparse.Namespace) -> str:
     """Return a pipeline with a named sink but no destination secret."""
     parts = [
-        "flvmux name=mux streamable=true skip-backwards-streams=true",
+        f"flvmux name=mux latency={MUX_LATENCY_NS} streamable=true skip-backwards-streams=true",
         "! identity name=mux_bytes silent=true",
-        "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0",
-        "! rtmp2sink name=destination sync=false async=false",
+        "! queue name=send_queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0",
+        f"! rtmp2sink name=destination sync=false async=false chunk-size={RTMP_CHUNK_SIZE}",
     ]
     inputs = getattr(args, "input", None) or []
     if inputs:
         tile_width, tile_height, positions = tile_layout(len(inputs))
-        parts.extend(["compositor name=mix background=black force-live=true ignore-inactive-pads=true"])
+        parts.extend([
+            "compositor name=mix background=black force-live=true",
+            f"ignore-inactive-pads=true latency={COMPOSITOR_LATENCY_NS}",
+        ])
         for index, (x, y) in enumerate(positions[:len(inputs)]):
             parts.extend([
                 f"sink_{index}::xpos={x}",
@@ -149,8 +163,13 @@ def pipeline_description(args: argparse.Namespace) -> str:
                 "sink_4::xpos=0", "sink_4::ypos=0",
                 "sink_4::width=3840", "sink_4::height=2160", "sink_4::zorder=0",
             ])
+        parts.append(
+            f"! video/x-raw,format=BGRA,width=3840,height=2160,framerate={args.rate}"
+        )
+        if len(inputs) == 8:
+            # Draw after composition so clock cadence proves composed output cadence.
+            parts.append("! cairooverlay name=brand_clock")
         parts.extend([
-            f"! video/x-raw,format=BGRA,width=3840,height=2160,framerate={args.rate}",
             "! videoconvert n-threads=8",
             f"! video/x-raw,format=NV12,width=3840,height=2160,framerate={args.rate},colorimetry=bt709",
         ])
@@ -199,7 +218,6 @@ def pipeline_description(args: argparse.Namespace) -> str:
                 "videotestsrc is-live=true pattern=ball animation-mode=frames motion=sweep",
                 "background-color=0xff071018 foreground-color=0xff26d9e9",
                 f"! video/x-raw,format=BGRA,width={tile_width},height={tile_height},framerate={args.rate}",
-                "! cairooverlay name=brand_clock",
                 "! queue max-size-buffers=2 leaky=downstream ! mix.sink_8",
             ])
         else:
@@ -240,6 +258,8 @@ class Output:
         self.source_rate_sample_counts = dict(self.source_counts)
         self.rates = {"video_fps": 0.0, "audio_buffers_per_second": 0.0, "mux_kbps": 0.0}
         self.source_rates = {name: 0.0 for name in self.source_counts}
+        self.source_lateness_window_ns = {name: 0 for name in self.source_counts}
+        self.source_lateness_ms = {name: 0.0 for name in self.source_counts}
         self.timecode_updates = 0
         self.timecode_rate_sample_count = 0
         self.last_sent_at = 0.0
@@ -253,10 +273,11 @@ class Output:
         """Draw timecode directly into each video frame without reparsing SVG."""
         elapsed = timestamp / 1_000_000_000 if timestamp >= 0 else time.monotonic() - self.started_at
         value = running_timecode(elapsed, self.args.rate)
+        x_offset, y_offset = (2560, 1440) if len(self.args.input or []) == 8 else (0, 0)
         cairo = self._cairo
         pointer = hash(context)
         cairo.cairo_set_source_rgba(pointer, 0.027, 0.063, 0.094, 0.92)
-        cairo.cairo_rectangle(pointer, 110, 190, 1060, 330)
+        cairo.cairo_rectangle(pointer, x_offset + 110, y_offset + 190, 1060, 330)
         cairo.cairo_fill_preserve(pointer)
         cairo.cairo_set_source_rgb(pointer, 0.149, 0.851, 0.914)
         cairo.cairo_set_line_width(pointer, 4)
@@ -264,11 +285,11 @@ class Output:
         cairo.cairo_select_font_face(pointer, b"monospace", 0, 1)
         cairo.cairo_set_font_size(pointer, 58)
         label = "LIVE TIMECODE"
-        cairo.cairo_move_to(pointer, 390, 300)
+        cairo.cairo_move_to(pointer, x_offset + 390, y_offset + 300)
         cairo.cairo_show_text(pointer, label.encode("ascii"))
         cairo.cairo_set_source_rgb(pointer, 0.957, 0.969, 1.0)
         cairo.cairo_set_font_size(pointer, 132)
-        cairo.cairo_move_to(pointer, 245, 440)
+        cairo.cairo_move_to(pointer, x_offset + 245, y_offset + 440)
         cairo.cairo_show_text(pointer, value.encode("ascii"))
         with self.lock:
             self.timecode_updates += 1
@@ -297,10 +318,7 @@ class Output:
         sink = pipeline.get_by_name("destination")
         sink.set_property("location", self.url)
         if sink.find_property("peak-kbps") is not None:
-            sink.set_property(
-                "peak-kbps",
-                self.args.video_bitrate_kbps + (self.args.audio_bitrate_bps // 1000) + 1000,
-            )
+            sink.set_property("peak-kbps", rtmp_peak_kbps(self.args))
         clock_overlay = pipeline.get_by_name("brand_clock")
         if clock_overlay is not None:
             self._cairo = ctypes.CDLL("libcairo.so.2")
@@ -346,15 +364,26 @@ class Output:
         self.pipeline = None
 
     def _source_probe(self, name: str):
-        def count(_pad, _info):
+        def count(_pad, info):
+            buffer = info.get_buffer()
+            lateness_ns = 0
+            pipeline = self.pipeline
+            if buffer is not None and pipeline is not None:
+                clock = pipeline.get_clock()
+                if clock is not None and buffer.pts != self.Gst.CLOCK_TIME_NONE:
+                    running_time = clock.get_time() - pipeline.get_base_time()
+                    lateness_ns = max(0, running_time - buffer.pts)
             with self.lock:
                 self.source_counts[name] += 1
+                self.source_lateness_window_ns[name] = max(
+                    self.source_lateness_window_ns[name], lateness_ns
+                )
             return self.Gst.PadProbeReturn.OK
 
         return count
 
     def _sink_bytes(self) -> int | None:
-        """Return bytes acknowledged by the RTMP sink, not merely bytes muxed."""
+        """Return bytes written by the RTMP sink, not merely bytes muxed."""
         pipeline = self.pipeline
         if pipeline is None:
             return None
@@ -365,6 +394,18 @@ class Output:
         if stats is None or not stats.has_field("out-bytes-total"):
             return None
         return int(stats.get_value("out-bytes-total"))
+
+    def _send_queue_levels(self) -> tuple[int | None, int | None]:
+        pipeline = self.pipeline
+        if pipeline is None:
+            return None, None
+        queue = pipeline.get_by_name("send_queue")
+        if queue is None:
+            return None, None
+        return (
+            int(queue.get_property("current-level-time")),
+            int(queue.get_property("current-level-bytes")),
+        )
 
     def run(self) -> int:
         import gi
@@ -420,6 +461,7 @@ class Output:
                     self.last_sent_at = now
                 self.counts["sent_bytes"] = sent_bytes
             sent_age = None if not self.last_sent_at else now - self.last_sent_at
+            send_queue_ns, send_queue_bytes = self._send_queue_levels()
             elapsed = now - self.rate_sample_at
             if elapsed >= 1.0:
                 cpu_seconds = time.process_time()
@@ -459,6 +501,13 @@ class Output:
                     for name, count in self.source_counts.items()
                 }
                 self.source_rate_sample_counts = dict(self.source_counts)
+                self.source_lateness_ms = {
+                    name: lateness / 1_000_000
+                    for name, lateness in self.source_lateness_window_ns.items()
+                }
+                self.source_lateness_window_ns = {
+                    name: 0 for name in self.source_lateness_window_ns
+                }
                 self.rates["timecode_fps"] = (
                     self.timecode_updates - self.timecode_rate_sample_count
                 ) / elapsed
@@ -480,6 +529,13 @@ class Output:
                 "mux_bitrate": self.rates["mux_kbps"] >= minimum_mux_kbps,
                 "destination_fresh": sent_age is not None and sent_age < 5.0,
                 "destination_bitrate": self.rates.get("sent_kbps", 0.0) >= minimum_mux_kbps,
+                "send_queue_not_backlogged": (
+                    send_queue_ns is not None and send_queue_ns < SEND_QUEUE_READY_NS
+                ),
+                "sources_within_compositor_budget": all(
+                    lateness * 1_000_000 <= SOURCE_LATENESS_READY_NS
+                    for lateness in self.source_lateness_ms.values()
+                ),
                 "all_sources_advancing": all(
                     rate >= minimum_source_fps for rate in self.source_rates.values()
                 ),
@@ -515,6 +571,19 @@ class Output:
                     "source_fps": {
                         name: round(value, 3) for name, value in self.source_rates.items()
                     },
+                    "source_lateness_ms": {
+                        name: round(value, 3)
+                        for name, value in self.source_lateness_ms.items()
+                    },
+                    "source_lateness_max_ms": round(
+                        max(self.source_lateness_ms.values(), default=0.0), 3
+                    ),
+                    "send_queue_level_ms": (
+                        None if send_queue_ns is None else round(send_queue_ns / 1_000_000, 3)
+                    ),
+                    "send_queue_level_bytes": send_queue_bytes,
+                    "send_queue_ready_ms": SEND_QUEUE_READY_NS / 1_000_000,
+                    "source_lateness_ready_ms": SOURCE_LATENESS_READY_NS / 1_000_000,
                     "minimum_video_fps": round(minimum_video_fps, 3),
                     "minimum_source_fps": round(minimum_source_fps, 3),
                     "minimum_audio_buffers_per_second": round(
@@ -539,7 +608,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--destination-label", default="YouTube Live")
     result.add_argument("--brand-text", default="MXL LIVE | 4K")
     result.add_argument("--assets-dir", default="/tmp/mxl-youtube-4k-assets")
-    result.add_argument("--video-encoder", default="nvh264enc")
+    result.add_argument("--video-encoder", default="x264enc")
     result.add_argument("--video-bitrate-kbps", type=int, default=30000)
     result.add_argument("--audio-bitrate-bps", type=int, default=128000)
     result.add_argument("--audio-rate-hz", type=int, default=48000)

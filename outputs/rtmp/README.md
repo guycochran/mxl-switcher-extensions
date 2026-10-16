@@ -89,11 +89,20 @@ all selected source branches to advance, encoded video near the requested
 cadence, encoded AAC frames at no less than 90% of the Program sample rate's
 frame cadence (46.875 frames/s at 48 kHz), fresh mux output and actual RTMP-sink bytes at
 no less than 70% of the requested video bitrate, and (for eight-up) the
-diagnostic clock to advance at the encoded cadence. A reconnect remains visible
+post-compositor diagnostic clock to advance at the encoded cadence. Source
+lateness must remain inside the compositor's 90 ms readiness budget. A reconnect remains visible
 in telemetry even after the pipeline recovers. A two-frame downstream-leaky
 queue between the compositor and encoder prevents a slow encoder from building
 an ever-older backlog; it sheds stale frames and makes the cadence gate fail
-instead.
+instead. The live compositor has a bounded 100 ms latency allowance for the
+eight CPU-heavy scale/convert branches, while the FLV aggregator has a bounded
+300 ms allowance for encoded A/V jitter. The RTMP connection uses 4096-byte
+chunks and is paced with 2x stream-rate headroom so a brief network or TLS
+stall can drain rather than becoming permanent latency. The final send queue
+must remain below 500 ms for readiness.
+
+The CPU-first profile defaults to `x264enc`; NVENC is an explicit optional
+override.
 
 Before treating the controller as screenshot-ready, run the read-only sustained
 gate through the same SSH tunnel:
@@ -107,8 +116,10 @@ python3 scripts/check_youtube_demo.py \
 
 The command exits nonzero if any source freezes, encoded cadence falls below
 90% of target, mux bitrate falls below 70% of target, the timecode freezes,
-audio stalls, mux output goes stale, or a reconnect occurs. It never reads or
-prints the stream key.
+audio falls below 90% of its expected AAC frame cadence, the send queue reaches
+500 ms, mux output goes stale, or a reconnect occurs. Its JSON records the
+worst source lateness and send-queue level so a failed run can be localized.
+It never reads or prints the stream key.
 
 ### Audience proof capture
 
