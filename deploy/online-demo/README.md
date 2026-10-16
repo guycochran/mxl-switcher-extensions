@@ -174,3 +174,39 @@ selecting the qualified two-frame ZoomISO operating point:
 
 This is a clean deployment/control and confidence-path smoke. It still does
 not replace a longer transmitted 4K Program and audience A/V-sync gate.
+
+## Published operator rehearsal (2026-10-16)
+
+The public `main` branch was then cloned into a new directory and exercised by
+following the documented operator sequence rather than using a lab checkout.
+The licensed runtime image and ZoomISO container were preloaded prerequisites;
+no private source tree or saved runtime configuration was reused.
+
+- `init` selected the operator-supplied MXL domain and wrote a fresh ignored
+  configuration; alternate loopback ports let the rehearsal coexist with an
+  unrelated running stack.
+- `doctor` passed Docker, Git, the live 8/8 paired-source requirement, the
+  complete licensed base-image contract, the pinned MediaMTX image, and the
+  32-logical-CPU capacity recommendation.
+- The first `up --apply` cloned and pinned Core, built all three local images,
+  and started all seven labelled services with zero restarts.
+- The 30-second `check` passed every gate: Core routing advanced; every hard
+  error counter remained zero and unchanged; Program, Preview, and all eight
+  multiview inputs advanced with zero terminal torn or missing reads; and the
+  YouTube controller found eight video plus eight audio sources ready for an
+  operator-supplied destination.
+- A bounded resource snapshot placed Core at about 13% of one logical CPU,
+  Program confidence at 11%, Preview at 2%, multiview at 5%, and every other
+  owned service below 2%; the largest owned RSS was about 246 MiB. The 4K
+  encoder was idle because no stream key was entered during this rehearsal.
+- `down --apply` removed all seven and only the seven rehearsal-owned
+  containers. Both pre-existing ZoomISO instances remained running with zero
+  restarts.
+
+The runtime design is cloud-provider neutral: it uses x86-64 Linux, Docker,
+loopback services, and one host-local MXL shared-memory domain rather than an
+Azure API. Equivalent non-burstable x86 instances on AWS or Google Cloud
+should work when supplied with the same licensed images and capacity. Treat
+that as portability guidance, not a provider acceptance claim, until the same
+gate has passed on that provider. Keep all MXL media components on one VM;
+shared memory does not span hosts. ARM instances are not currently qualified.
