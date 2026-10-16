@@ -19,6 +19,7 @@ def sample(ready=True, failed=None, source_fps=29.97, mux_kbps=30000, reconnects
             "failed_checks": failed or [],
             "reconnects": reconnects,
             "metrics": {
+                "composed_fps": 29.97,
                 "video_fps": 29.97,
                 "mux_kbps": mux_kbps,
                 "sent_kbps": mux_kbps,
@@ -34,6 +35,7 @@ class YouTubeDemoGateTests(unittest.TestCase):
         result = gate.summarize([sample(), sample(), sample()], 8)
         self.assertTrue(result["passed"])
         self.assertEqual(result["source_fps_min"], 29.97)
+        self.assertEqual(result["composed_fps_min"], 29.97)
         self.assertEqual(result["mux_mbps_min"], 30.0)
         self.assertEqual(result["sent_mbps_min"], 30.0)
 
