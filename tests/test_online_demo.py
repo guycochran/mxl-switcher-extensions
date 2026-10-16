@@ -46,7 +46,7 @@ class OnlineDemoTests(unittest.TestCase):
             "webrtc_port": 8889,
             "ice_tcp_port": 8189,
             "confidence_browser_base": "http://127.0.0.1:13089",
-            "input_delay_frames": 2,
+            "input_delay_frames": 1,
             "state_dir": str(self.root / "state"),
         }
         self.config_file = self.root / "config.json"
@@ -107,8 +107,20 @@ class OnlineDemoTests(unittest.TestCase):
         state = pathlib.Path(cfg["state_dir"])
         self.assertTrue((state / "core.conf").exists())
         self.assertIn("initial_program=zoomiso-1", (state / "core.conf").read_text())
+        self.assertIn("input_delay_frames=1", (state / "core.conf").read_text())
         program = json.loads((state / "definitions" / "program.json").read_text())
         self.assertEqual(program["id"], first["program_flow_id"])
+
+    def test_prepare_defaults_to_qualified_two_frame_presentation_delay(self):
+        value = dict(self.config)
+        value.pop("input_delay_frames")
+        self.config_file.write_text(json.dumps(value))
+
+        cfg = demo.load_config(self.config_file)
+        demo.prepare(cfg)
+
+        core_config = pathlib.Path(cfg["state_dir"], "core.conf").read_text()
+        self.assertIn("input_delay_frames=1", core_config)
 
     def test_plan_includes_skin_one_wall_and_secret_free_youtube_control(self):
         cfg = demo.load_config(self.config_file)

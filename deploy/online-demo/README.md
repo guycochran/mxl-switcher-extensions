@@ -49,6 +49,13 @@ encoding, and publishes one confidence stream. The ATEM-style Skin overlays
 Program and Preview tally on that wall and provides direct Cut, Preview, and
 Take controls.
 
+The default `input_delay_frames=1` is the qualified ZoomISO operating point.
+Together with Core's same-tick safety grain, it produces a fixed two-frame
+presentation delay while leaving two slots of headroom in ZoomISO's six-grain
+ring. Do not increase it casually: a three-frame effective delay reaches the
+oldest safe slot and can become too late if the writer commits between the
+runtime snapshot and the read.
+
 The Skin also contains ME/SuperSource controls, but the default portable bundle
 does not enable them. The original warm-bank helper depends on compositor files
 that were host-local in the lab. The controls fail closed until a portable,

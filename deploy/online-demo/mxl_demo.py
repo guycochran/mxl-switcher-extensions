@@ -223,7 +223,7 @@ def prepare(cfg: dict) -> dict:
         f"rate_numerator={int(rate.get('numerator', 30))}",
         f"rate_denominator={int(rate.get('denominator', 1))}",
         "frames=0", "take_every=0",
-        f"input_delay_frames={int(cfg.get('input_delay_frames', 2))}",
+        f"input_delay_frames={int(cfg.get('input_delay_frames', 1))}",
         "read_timeout_ns=5000000", "control_host=127.0.0.1",
         f"control_port={cfg['core_port']}",
     ])

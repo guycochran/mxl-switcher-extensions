@@ -6,7 +6,7 @@
   "docker": ["sudo", "docker"],
   "base_image": "mxl-lab:latest",
   "core_repository": "https://github.com/guycochran/mxl-switcher-core.git",
-  "core_ref": "2bc921d47f6481c789a67592d18c08cbe0c61e45",
+  "core_ref": "29a7a9f0b427f69ac541bca1413ed2627339c119",
   "core_repo": "",
   "core_image": "mxl-switcher-core:online-demo",
   "operator_image": "mxl-operator-suite:online-demo",
@@ -20,6 +20,6 @@
   "webrtc_port": 8889,
   "ice_tcp_port": 8189,
   "confidence_browser_base": "http://127.0.0.1:13089",
-  "input_delay_frames": 2,
+  "input_delay_frames": 1,
   "state_dir": "~/.local/state/mxl-online-demo"
 }
