@@ -144,3 +144,20 @@ failure/unverified gate. Do not describe it as an end-to-end Zoom participant
 demonstration. The next gate must visibly identify all eight live tiles at the
 controller and audience outputs, reject diagnostic or stale source selection,
 and capture synchronized resource and receiver telemetry before shutdown.
+
+### Eight-source rebuild evidence
+
+The follow-up rebuild selected eight distinct live ZoomISO MXL writers and the
+loopback-only controller reported advancing video and audio for a CPU-encoded
+3840x2160, 30000/1001-fps, 30 Mbps RTMPS output. The two public-safe captures
+below intentionally omit the stream key, meeting details, participant
+identities, private addresses, and flow identifiers.
+
+![Eight active ZoomISO MXL source slots, with participant imagery redacted](../../docs/assets/zoomiso-mxl-eight-source-public-proof.jpg)
+
+![Loopback-only YouTube 4K controller showing eight sources and the CPU signal chain](../../docs/assets/youtube-4k-control-live.jpg)
+
+These images prove controller-side source selection and transmission state;
+they are not, by themselves, an audience-player acceptance result. Promotion
+still requires a separate YouTube audience screenshot showing the intended
+eight-tile composition plus platform health while the same run is active.
