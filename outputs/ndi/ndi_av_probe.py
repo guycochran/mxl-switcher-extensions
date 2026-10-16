@@ -9,6 +9,35 @@ import threading
 import time
 
 
+SAMPLE_WIDTHS = {
+    "F32LE": 4,
+    "F32BE": 4,
+    "S16LE": 2,
+    "S16BE": 2,
+}
+
+
+def evaluate(result: dict, expected_video_fps: float = 30.0, expected_audio_rate: int = 48_000) -> dict:
+    video_span = result["video_last_pts"] - result["video_first_pts"] if result["video_buffers"] > 1 else 0
+    audio_span = result["audio_last_pts"] - result["audio_first_pts"] if result["audio_buffers"] > 1 else 0
+    result["video_fps_from_pts"] = (
+        (result["video_buffers"] - 1) * 1_000_000_000 / video_span if video_span > 0 else 0.0
+    )
+    result["audio_sample_rate_from_pts"] = (
+        result["audio_sample_frames"] * 1_000_000_000 / audio_span if audio_span > 0 else 0.0
+    )
+    result["video_rate_ok"] = expected_video_fps * 0.9 <= result["video_fps_from_pts"] <= expected_video_fps * 1.1
+    result["audio_rate_ok"] = expected_audio_rate * 0.95 <= result["audio_sample_rate_from_pts"] <= expected_audio_rate * 1.05
+    result["passed"] = (
+        result["error"] is None
+        and result["video_buffers"] > 1
+        and result["audio_buffers"] > 1
+        and result["video_rate_ok"]
+        and result["audio_rate_ok"]
+    )
+    return result
+
+
 def probe(source_name: str, seconds: float = 3.0, connect_timeout_ms: int = 10_000) -> dict:
     import gi
 
@@ -33,6 +62,10 @@ def probe(source_name: str, seconds: float = 3.0, connect_timeout_ms: int = 10_0
         "video_last_pts": None,
         "audio_buffers": 0,
         "audio_bytes": 0,
+        "audio_sample_frames": 0,
+        "audio_rate_hz": None,
+        "audio_channels": None,
+        "audio_format": None,
         "audio_first_pts": None,
         "audio_last_pts": None,
         "error": None,
@@ -50,6 +83,17 @@ def probe(source_name: str, seconds: float = 3.0, connect_timeout_ms: int = 10_0
                 if result[f"{kind}_first_pts"] is None:
                     result[f"{kind}_first_pts"] = int(buffer.pts)
                 result[f"{kind}_last_pts"] = int(buffer.pts)
+                if kind == "audio":
+                    structure = sample.get_caps().get_structure(0)
+                    audio_format = structure.get_string("format")
+                    channels = structure.get_value("channels")
+                    rate = structure.get_value("rate")
+                    width = SAMPLE_WIDTHS.get(audio_format)
+                    result["audio_format"] = audio_format
+                    result["audio_channels"] = channels
+                    result["audio_rate_hz"] = rate
+                    if width and channels:
+                        result["audio_sample_frames"] += buffer.get_size() // (width * channels)
             return Gst.FlowReturn.OK
 
         return receive
@@ -73,12 +117,7 @@ def probe(source_name: str, seconds: float = 3.0, connect_timeout_ms: int = 10_0
             break
     pipeline.set_state(Gst.State.NULL)
     with lock:
-        result["passed"] = (
-            result["error"] is None
-            and result["video_buffers"] > 0
-            and result["audio_buffers"] > 0
-        )
-        return dict(result)
+        return evaluate(dict(result))
 
 
 def main() -> int:

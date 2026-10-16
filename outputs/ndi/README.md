@@ -6,15 +6,18 @@ Paired Program Master video/audio sent as one NDI source.
 video-only Program and Preview outputs under load. This package extracts that
 flow-replacement behavior, adds the 48 kHz stereo Program audio branch, and
 publishes the common extension health contract. A short live receiver smoke
-has now proved simultaneous 1080p30 picture and 48 kHz stereo audio over the
-wire. Duration, content-level A/V timing, recovery, and resource gates remain,
-so the package is not marked accepted.
+has now proved simultaneous 1080p30 picture and full-rate 48 kHz stereo audio
+over the wire. The independent receiver measured 30.03 fps and 48,163 audio
+sample-frames/s. Duration, content-level A/V timing, recovery, and resource
+gates remain, so the package is not marked accepted.
 
 `ndi_output.py`:
 
 - reads stable MXL Program video and audio flow identities;
 - combines UYVY video and float32 48 kHz stereo audio with
   `ndisinkcombiner` before `ndisink`;
+- coalesces the source's 1 ms audio grains into one 1/30-second audio block
+  per video frame before the NDI combiner;
 - uses bounded queues and argv-only process launch;
 - requires both MXL essences and a successful NDI wire A/V receiver probe
   before becoming ready;
@@ -36,8 +39,9 @@ python3 outputs/ndi/ndi_output.py \
 ```
 
 The verification name is the full source name shown to an NDI receiver, not
-only the value passed to `--ndi-name`. Readiness remains red if the receiver
-probe does not observe at least one video buffer and one audio buffer. The
+only the value passed to `--ndi-name`. Readiness remains red unless the
+receiver observes both essences and measures video within 10% of 30 fps plus
+audio within 5% of 48 kHz. Presence alone is deliberately insufficient. The
 probe is also available by itself:
 
 ```sh

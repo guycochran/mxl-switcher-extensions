@@ -22,7 +22,7 @@ QUEUE_NS = 500_000_000
 VIDEO_QUEUE_BUFFERS = 4
 AUDIO_RATE = 48_000
 AUDIO_CHANNELS = 2
-REQUIRED_PLUGINS = ("mxlsrc", "ndisinkcombiner", "ndisink")
+REQUIRED_PLUGINS = ("mxlsrc", "audiobuffersplit", "ndisinkcombiner", "ndisink")
 
 
 def _flow_name(value: str) -> str:
@@ -61,6 +61,7 @@ def gst_command(domain: str, video_flow: str, audio_flow: str, ndi_name: str) ->
         "max-size-bytes=0", "!",
         "audioconvert", "!", "audioresample", "!",
         f"audio/x-raw,format=F32LE,rate={AUDIO_RATE},channels={AUDIO_CHANNELS},layout=interleaved", "!",
+        "audiobuffersplit", "output-buffer-duration=1/30", "!",
         "queue", f"max-size-time={QUEUE_NS}", "max-size-buffers=0",
         "max-size-bytes=0", "!",
         "combiner.audio",
@@ -131,6 +132,8 @@ class NDIOutput:
             ),
             "wire_video_buffers": 0 if not self.wire_verification else self.wire_verification.get("video_buffers", 0),
             "wire_audio_buffers": 0 if not self.wire_verification else self.wire_verification.get("audio_buffers", 0),
+            "wire_video_fps": 0.0 if not self.wire_verification else self.wire_verification.get("video_fps_from_pts", 0.0),
+            "wire_audio_sample_rate_hz": 0.0 if not self.wire_verification else self.wire_verification.get("audio_sample_rate_from_pts", 0.0),
             "audio_rate_hz": AUDIO_RATE,
             "audio_channels": AUDIO_CHANNELS,
             "queue_bound_ns": QUEUE_NS,

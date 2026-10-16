@@ -34,6 +34,8 @@ class CommandTests(unittest.TestCase):
         self.assertIn("combiner.audio", command)
         self.assertIn("video/x-raw,format=UYVY", command)
         self.assertIn("audio/x-raw,format=F32LE,rate=48000,channels=2,layout=interleaved", command)
+        self.assertIn("audiobuffersplit", command)
+        self.assertIn("output-buffer-duration=1/30", command)
         self.assertNotIn("sh", command)
 
     def test_unsafe_or_blank_identifiers_are_refused(self):
@@ -93,6 +95,8 @@ class LifecycleTests(unittest.TestCase):
                 "passed": True,
                 "video_buffers": 3,
                 "audio_buffers": 7,
+                "video_fps_from_pts": 30.0,
+                "audio_sample_rate_from_pts": 48000.0,
             },
         )
 
@@ -106,6 +110,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(state["metrics"]["wire_av_verified"])
         self.assertEqual(state["metrics"]["wire_video_buffers"], 3)
         self.assertEqual(state["metrics"]["wire_audio_buffers"], 7)
+        self.assertEqual(state["metrics"]["wire_video_fps"], 30.0)
+        self.assertEqual(state["metrics"]["wire_audio_sample_rate_hz"], 48000.0)
         self.assertEqual(state["metrics"]["audio_rate_hz"], 48000)
         self.audio.rmdir()
         self.assertEqual(self.adapter.check(), "wait")
