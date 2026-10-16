@@ -30,6 +30,11 @@ OWNED_SUFFIXES = (
 # Every container this launcher creates carries this label. Names alone are not
 # proof of ownership: an unrelated service may already use the same prefix.
 OWNER_LABEL = "io.github.guycochran.mxl-online-demo.deployment"
+# Confidence encoders print a cumulative stats line at this interval. The
+# acceptance gate compares the newest line before and after its window, so the
+# window must span several lines or "frames advanced" and "live" are stale.
+CONFIDENCE_STATS_EVERY_S = 5
+MIN_ACCEPTANCE_SECONDS = 3 * CONFIDENCE_STATS_EVERY_S
 HARD_COUNTERS = (
     "invalid", "too_early", "too_late", "timeouts", "reader_reopens",
     "sync_timeouts", "sync_too_early", "sync_too_late", "no_common_window",
@@ -418,7 +423,8 @@ def commands(cfg: dict, resolved: dict) -> list[list[str]]:
                          "--cpus", "2", "-v", mount, cfg["operator_image"],
                          "/opt/mxl-operator/mxl_confidence_encoder.py", "--domain", "/mxl-domain",
                          "--layout", layout, "--factor", str(factor), "--fps", str(fps),
-                         "--bitrate-kbps", str(bitrate), "--rtmp",
+                         "--bitrate-kbps", str(bitrate),
+                         "--stats-every-s", str(CONFIDENCE_STATS_EVERY_S), "--rtmp",
                          f"rtmp://127.0.0.1:{cfg['rtmp_port']}/{path}")
         for label, flow in inputs:
             command.extend(["--input", f"{label}={flow}"])
@@ -583,8 +589,11 @@ def evaluate_acceptance(before: dict, after: dict, source_count: int,
 
 
 def acceptance(cfg: dict, seconds: float) -> int:
-    if seconds <= 0:
-        raise ValueError("acceptance duration must be positive")
+    if seconds < MIN_ACCEPTANCE_SECONDS:
+        raise ValueError(
+            f"acceptance needs at least {MIN_ACCEPTANCE_SECONDS} seconds so each "
+            f"confidence encoder reports fresh stats (every {CONFIDENCE_STATS_EVERY_S} s)"
+        )
     before = acceptance_snapshot(cfg)
     print(f"Observing the running demo for {seconds:g} seconds...")
     time.sleep(seconds)

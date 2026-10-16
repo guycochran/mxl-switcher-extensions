@@ -91,6 +91,10 @@ readiness. It writes the full machine-readable result to the private
 `state_dir/acceptance-latest.json`; the report contains runtime identifiers and
 must not be committed.
 
+Confidence encoders report cumulative stats every 5 seconds, and the gate
+refuses windows shorter than 15 seconds, so both snapshots always compare fresh
+frame counts and live state rather than a line printed up to a minute earlier.
+
 `prepare` may be rerun after ZoomISO's periodic flow rotation. It replaces the
 private resolved configuration atomically. Stop and relaunch this demo bundle
 after rotation; do not edit flow UUIDs by hand.
