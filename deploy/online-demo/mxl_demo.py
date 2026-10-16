@@ -49,6 +49,7 @@ def load_config(path: pathlib.Path) -> dict:
         "base_image", "core_repository", "core_ref", "core_image", "operator_image",
         "youtube_image", "mediamtx_image", "core_port", "skin_port", "youtube_port",
         "rtmp_port", "mediamtx_api_port", "webrtc_port", "ice_tcp_port", "state_dir",
+        "confidence_browser_base",
     }
     missing = sorted(required - cfg.keys())
     if missing:
@@ -83,9 +84,10 @@ def load_config(path: pathlib.Path) -> dict:
         cfg[key] = port
     if len({cfg[k] for k in port_keys}) != len(port_keys):
         raise ValueError("all configured ports must be distinct")
-    fixed_ports = {"rtmp_port": 1935, "mediamtx_api_port": 9997, "webrtc_port": 8889, "ice_tcp_port": 8189}
-    if any(cfg[key] != value for key, value in fixed_ports.items()):
-        raise ValueError("the pinned confidence profile requires RTMP 1935, API 9997, WebRTC 8889, and ICE-TCP 8189")
+    browser_base = str(cfg["confidence_browser_base"]).rstrip("/")
+    if not re.fullmatch(r"http://(?:127\.0\.0\.1|localhost):[0-9]+", browser_base):
+        raise ValueError("confidence_browser_base must be loopback HTTP with an explicit port")
+    cfg["confidence_browser_base"] = browser_base
     return cfg
 
 
@@ -214,6 +216,21 @@ def prepare(cfg: dict) -> dict:
         f"control_port={cfg['core_port']}",
     ])
     (state / "core.conf").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    mediamtx = "\n".join([
+        "logLevel: info",
+        "api: yes",
+        f"apiAddress: 127.0.0.1:{cfg['mediamtx_api_port']}",
+        "metrics: no", "pprof: no", "playback: no", "rtsp: no", "hls: no",
+        "srt: no", "moq: no", "rtmp: yes",
+        f"rtmpAddress: 127.0.0.1:{cfg['rtmp_port']}",
+        "webrtc: yes",
+        f"webrtcAddress: 127.0.0.1:{cfg['webrtc_port']}",
+        'webrtcLocalUDPAddress: ""',
+        f"webrtcLocalTCPAddress: 127.0.0.1:{cfg['ice_tcp_port']}",
+        "webrtcIPsFromInterfaces: no", "webrtcAdditionalHosts: [127.0.0.1]",
+        "paths:", "  mxl-program:", "  mxl-preview:", "  mxl-multiview:", "",
+    ])
+    (state / "mediamtx.yml").write_text(mediamtx, encoding="utf-8")
     resolved = {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "program_flow_id": program_id,
@@ -351,7 +368,6 @@ def wait_url(url: str, seconds: float = 20.0) -> None:
 
 def commands(cfg: dict, resolved: dict) -> list[list[str]]:
     state = pathlib.Path(cfg["state_dir"])
-    core = pathlib.Path(cfg["core_repo"])
     mount = f"{cfg['domain_mount_source']}:/mxl-domain"
     names = {suffix: container_name(cfg, suffix) for suffix in OWNED_SUFFIXES}
     common = ["--restart=unless-stopped"]
@@ -361,7 +377,7 @@ def commands(cfg: dict, resolved: dict) -> list[list[str]]:
                "-v", f"{state / 'definitions'}:/etc/mxl-switcher-core/definitions:ro",
                cfg["core_image"], "--config", "/etc/mxl-switcher-core.conf"),
         docker(cfg, "run", "-d", "--name", names["mediamtx"], *common, "--network", "host",
-               "-v", f"{core / 'deploy/confidence/mediamtx.yml'}:/mediamtx.yml:ro",
+               "-v", f"{state / 'mediamtx.yml'}:/mediamtx.yml:ro",
                cfg["mediamtx_image"]),
     ]
     confidence = [
@@ -377,7 +393,8 @@ def commands(cfg: dict, resolved: dict) -> list[list[str]]:
                          "--cpus", "2", "-v", mount, cfg["operator_image"],
                          "/opt/mxl-operator/mxl_confidence_encoder.py", "--domain", "/mxl-domain",
                          "--layout", layout, "--factor", str(factor), "--fps", str(fps),
-                         "--bitrate-kbps", str(bitrate), "--rtmp", f"rtmp://127.0.0.1:1935/{path}")
+                         "--bitrate-kbps", str(bitrate), "--rtmp",
+                         f"rtmp://127.0.0.1:{cfg['rtmp_port']}/{path}")
         for label, flow in inputs:
             command.extend(["--input", f"{label}={flow}"])
         result.append(command)
@@ -385,9 +402,9 @@ def commands(cfg: dict, resolved: dict) -> list[list[str]]:
         docker(cfg, "run", "-d", "--name", names["skin"], *common, "--network", "host",
                cfg["operator_image"], "/opt/mxl-operator/server.py",
                "--port", str(cfg["skin_port"]), "--core", f"http://127.0.0.1:{cfg['core_port']}",
-               "--program-url", f"http://127.0.0.1:{cfg['webrtc_port']}/mxl-program/",
-               "--preview-url", f"http://127.0.0.1:{cfg['webrtc_port']}/mxl-preview/",
-               "--multiview-url", f"http://127.0.0.1:{cfg['webrtc_port']}/mxl-multiview/"),
+               "--program-url", f"{cfg['confidence_browser_base']}/mxl-program/",
+               "--preview-url", f"{cfg['confidence_browser_base']}/mxl-preview/",
+               "--multiview-url", f"{cfg['confidence_browser_base']}/mxl-multiview/"),
         docker(cfg, "run", "-d", "--name", names["youtube"], *common,
                "-p", f"127.0.0.1:{cfg['youtube_port']}:18121", "-v", mount,
                cfg["youtube_image"], "--domain", "/mxl-domain", "--source-count",

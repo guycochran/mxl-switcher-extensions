@@ -34,6 +34,10 @@ ZoomISO and EasyMXL remain external. The stop command cannot remove them.
 - The launcher reads MXL metadata on the host before it starts containers;
   `domain_host_path` therefore must be readable by the launcher account.
 - The Skin stays out of the media path. Losing it cannot stop Core.
+- MediaMTX configuration is generated in the private state directory from the
+  configured RTMP, API, WebRTC, and ICE ports, so an existing confidence stack
+  does not need to be stopped. `confidence_browser_base` names the loopback
+  address operators reach through their SSH tunnel.
 
 ## Multiview and ATEM Skin
 

@@ -59,6 +59,12 @@ ssh -N \
   USER@PRODUCTION_HOST
 ```
 
+The left side of the WebRTC forward must match the port in
+`confidence_browser_base`; its right side is `webrtc_port`. The ICE forward
+must use `ice_tcp_port` on both sides because that port is advertised to the
+browser. This separation lets the bundle coexist with an existing confidence
+server without exposing either one.
+
 - ATEM-style operator Skin: `http://127.0.0.1:13010/`
 - EIC health: `http://127.0.0.1:13010/health`
 - YouTube controller: `http://127.0.0.1:18123/`

@@ -44,6 +44,7 @@ class OnlineDemoTests(unittest.TestCase):
             "mediamtx_api_port": 9997,
             "webrtc_port": 8889,
             "ice_tcp_port": 8189,
+            "confidence_browser_base": "http://127.0.0.1:13089",
             "input_delay_frames": 2,
             "state_dir": str(self.root / "state"),
         }
@@ -116,8 +117,10 @@ class OnlineDemoTests(unittest.TestCase):
         self.assertEqual(len(commands), 7)
         self.assertIn("test-demo-multiview-confidence", rendered)
         self.assertIn("--layout wall", rendered)
+        self.assertIn("rtmp://127.0.0.1:1935/mxl-multiview", rendered)
         self.assertIn("test-demo-skin", rendered)
         self.assertIn("--port 9710", rendered)
+        self.assertIn("http://127.0.0.1:13089/mxl-program/", rendered)
         self.assertIn("test-demo-youtube", rendered)
         self.assertIn("--mix-source-audio", rendered)
         self.assertEqual(rendered.count("--preferred-flow"), 4)
@@ -127,6 +130,11 @@ class OnlineDemoTests(unittest.TestCase):
     def test_invalid_ports_and_names_fail_closed(self):
         value = dict(self.config)
         value["deployment_id"] = "Bad Name"
+        self.config_file.write_text(json.dumps(value))
+        with self.assertRaises(ValueError):
+            demo.load_config(self.config_file)
+        value = dict(self.config)
+        value["confidence_browser_base"] = "http://public.example:8889"
         self.config_file.write_text(json.dumps(value))
         with self.assertRaises(ValueError):
             demo.load_config(self.config_file)

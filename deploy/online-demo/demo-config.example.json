@@ -19,6 +19,7 @@
   "mediamtx_api_port": 9997,
   "webrtc_port": 8889,
   "ice_tcp_port": 8189,
+  "confidence_browser_base": "http://127.0.0.1:13089",
   "input_delay_frames": 2,
   "state_dir": "~/.local/state/mxl-online-demo"
 }
