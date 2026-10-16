@@ -40,10 +40,10 @@ class YouTubeControlTests(unittest.TestCase):
             self.make_flow(directory, "flow-1a", 1, "device-a")
             self.make_flow(directory, "stale", 3, age=20)
             found = control.discover_zoomiso_video(pathlib.Path(directory), active_seconds=5)
-            self.assertEqual([item.flow_id for item in found], ["flow-1a", "flow-1b", "flow-2"])
+            self.assertEqual([item.flow_id for item in found], ["flow-1a", "flow-2"])
 
     def test_page_has_masked_key_and_never_embeds_a_key_value(self):
-        body = control.page("csrf-value").decode("utf-8")
+        body = control.page("csrf-value", 4).decode("utf-8")
         self.assertIn('type="password"', body)
         self.assertIn("csrf-value", body)
         self.assertIn("kept only in memory", body)
@@ -54,6 +54,8 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertIsNone(args.stream_key_file)
         self.assertEqual(args.port, 18121)
         self.assertFalse(args.container_bind)
+        self.assertEqual(args.source_count, 4)
+        self.assertEqual(args.active_seconds, 30.0)
 
 
 if __name__ == "__main__":

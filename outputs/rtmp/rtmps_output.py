@@ -16,7 +16,7 @@ from http.server import ThreadingHTTPServer
 from typing import Any
 
 from common.health import handler_for_snapshot
-from youtube_8up_canvas import Input, parse_input, tile_positions, write_label_png
+from youtube_8up_canvas import Input, parse_input, tile_layout, write_label_png
 
 
 QUEUE_NS = 2_000_000_000
@@ -63,15 +63,14 @@ def pipeline_description(args: argparse.Namespace) -> str:
     ]
     inputs = getattr(args, "input", None) or []
     if inputs:
-        if len(inputs) != 8:
-            raise ValueError("direct 4K canvas output requires exactly eight inputs")
+        tile_width, tile_height, positions = tile_layout(len(inputs))
         parts.extend(["compositor name=mix background=black force-live=true ignore-inactive-pads=true"])
-        for index, (x, y) in enumerate(tile_positions()):
+        for index, (x, y) in enumerate(positions[:len(inputs)]):
             parts.extend([
                 f"sink_{index}::xpos={x}",
                 f"sink_{index}::ypos={y}",
-                "sink_%d::width=1280" % index,
-                "sink_%d::height=720" % index,
+                f"sink_{index}::width={tile_width}",
+                f"sink_{index}::height={tile_height}",
             ])
         parts.extend([
             f"! video/x-raw,format=BGRA,width=3840,height=2160,framerate={args.rate}",
@@ -80,7 +79,7 @@ def pipeline_description(args: argparse.Namespace) -> str:
         ])
     else:
         if not args.video_flow:
-            raise ValueError("either --video-flow or exactly eight --input values are required")
+            raise ValueError("either --video-flow or exactly four/eight --input values are required")
         parts.extend([
             f"mxlsrc domain={args.domain} video-flow-id={args.video_flow} automatic-eos=false",
             "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 leaky=downstream",
@@ -106,24 +105,26 @@ def pipeline_description(args: argparse.Namespace) -> str:
         asset_dir = pathlib.Path(args.assets_dir)
         for index, source in enumerate(inputs):
             asset = asset_dir / f"source-{index + 1}.png"
-            write_label_png(asset, 1280, 88, source.label)
+            label_height = 104 if len(inputs) == 4 else 88
+            write_label_png(asset, tile_width, label_height, source.label)
             parts.extend([
                 f"mxlsrc domain={args.domain} video-flow-id={source.flow_id} automatic-eos=false",
                 "! queue max-size-buffers=3 max-size-bytes=0 max-size-time=0 leaky=downstream",
                 "! videoconvert n-threads=2 ! videoscale method=1 add-borders=false",
-                f"! video/x-raw,format=BGRA,width=1280,height=720,framerate={args.rate}",
-                f"! gdkpixbufoverlay location={asset} offset-y=632",
+                f"! video/x-raw,format=BGRA,width={tile_width},height={tile_height},framerate={args.rate}",
+                f"! gdkpixbufoverlay location={asset} offset-y={tile_height - label_height}",
                 "! queue max-size-buffers=2 leaky=downstream",
                 f"! mix.sink_{index}",
             ])
-        brand = asset_dir / "brand.png"
-        write_label_png(brand, 1280, 720, args.brand_text)
-        parts.extend([
-            "videotestsrc is-live=true pattern=black",
-            f"! video/x-raw,format=BGRA,width=1280,height=720,framerate={args.rate}",
-            f"! gdkpixbufoverlay location={brand}",
-            "! queue max-size-buffers=2 leaky=downstream ! mix.sink_8",
-        ])
+        if len(inputs) == 8:
+            brand = asset_dir / "brand.png"
+            write_label_png(brand, tile_width, tile_height, args.brand_text)
+            parts.extend([
+                "videotestsrc is-live=true pattern=black",
+                f"! video/x-raw,format=BGRA,width={tile_width},height={tile_height},framerate={args.rate}",
+                f"! gdkpixbufoverlay location={brand}",
+                "! queue max-size-buffers=2 leaky=downstream ! mix.sink_8",
+            ])
     return " ".join(parts)
 
 
@@ -284,9 +285,9 @@ def main(argv: list[str] | None = None) -> int:
     if not 1000 <= args.video_bitrate_kbps <= 100000:
         raise SystemExit("video bitrate is outside the allowed range")
     if bool(args.video_flow) == bool(args.input):
-        raise SystemExit("choose one --video-flow or exactly eight --input values")
-    if args.input and len(args.input) != 8:
-        raise SystemExit("direct 4K canvas output requires exactly eight --input values")
+        raise SystemExit("choose one --video-flow or exactly four/eight --input values")
+    if args.input and len(args.input) not in {4, 8}:
+        raise SystemExit("direct 4K canvas output requires exactly four or eight --input values")
     try:
         key = read_stream_key(args.stream_key_file)
         destination_url(args.server_url, key)

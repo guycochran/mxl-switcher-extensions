@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pure layout and label helpers for the direct 4K eight-up RTMPS output."""
+"""Pure layout and label helpers for direct multi-view 4K RTMPS output."""
 
 from __future__ import annotations
 
@@ -91,6 +91,15 @@ def parse_input(value: str) -> Input:
     return Input(label, flow_id)
 
 
+def tile_layout(count: int) -> tuple[int, int, list[tuple[int, int]]]:
+    """Return tile dimensions and origins for a 4- or 8-source UHD canvas."""
+    if count == 4:
+        return 1920, 1080, [((index % 2) * 1920, (index // 2) * 1080) for index in range(4)]
+    if count == 8:
+        return 1280, 720, [((index % 3) * 1280, (index // 3) * 720) for index in range(9)]
+    raise ValueError("direct 4K canvas output requires exactly four or eight inputs")
+
+
 def tile_positions() -> list[tuple[int, int]]:
-    """Return the nine 1280x720 cell origins in a 3840x2160 canvas."""
-    return [((index % 3) * 1280, (index // 3) * 720) for index in range(9)]
+    """Compatibility helper for the original nine-cell eight-source layout."""
+    return tile_layout(8)[2]

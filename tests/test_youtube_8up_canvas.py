@@ -23,6 +23,11 @@ class YouTubeCanvasTests(unittest.TestCase):
             self.assertTrue(path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
         self.assertEqual(canvas.tile_positions()[8], (2560, 1440))
 
+    def test_four_up_uses_native_1080p_quadrants(self):
+        width, height, positions = canvas.tile_layout(4)
+        self.assertEqual((width, height), (1920, 1080))
+        self.assertEqual(positions, [(0, 0), (1920, 0), (0, 1080), (1920, 1080)])
+
     def test_inputs_are_label_and_flow_pairs(self):
         self.assertEqual(canvas.parse_input("SOURCE 1=flow-1"), canvas.Input("SOURCE 1", "flow-1"))
         with self.assertRaises(ValueError):

@@ -55,6 +55,21 @@ class RTMPSOutputTests(unittest.TestCase):
             self.assertNotIn("mxlsink", description)
             self.assertTrue((pathlib.Path(directory) / "brand.png").is_file())
 
+    def test_direct_four_up_canvas_uses_native_1080p_quadrants(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = self.args()
+            args.video_flow = None
+            args.input = [rtmps.Input(f"SOURCE {i + 1}", f"flow-{i + 1}") for i in range(4)]
+            args.assets_dir = directory
+            args.brand_text = "MXL LIVE | 4K"
+            description = rtmps.pipeline_description(args)
+            self.assertEqual(description.count("video-flow-id="), 4)
+            self.assertIn("sink_3::xpos=1920 sink_3::ypos=1080", description)
+            self.assertIn("sink_3::width=1920 sink_3::height=1080", description)
+            self.assertIn("width=1920,height=1080,framerate=30/1", description)
+            self.assertNotIn("videotestsrc", description)
+            self.assertNotIn("mix.sink_4", description)
+
     def test_stream_key_requires_private_regular_file(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "key"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Loopback-only control surface for the 4K eight-up YouTube output."""
+"""Loopback-only control surface for a 4K multi-view YouTube output."""
 
 from __future__ import annotations
 
@@ -24,10 +24,10 @@ FLOW_LABEL = re.compile(r"^ZoomISO Cloud Instance Output (\d+) Video$")
 MAX_REQUEST_BYTES = 8192
 
 
-def discover_zoomiso_video(domain: pathlib.Path, active_seconds: float = 5.0) -> list[Input]:
-    """Return active ZoomISO video flows in stable output/device order."""
+def discover_zoomiso_video(domain: pathlib.Path, active_seconds: float = 30.0) -> list[Input]:
+    """Return one freshest active ZoomISO flow per numbered output."""
     now = time.time()
-    found: list[tuple[int, str, Input]] = []
+    found: list[tuple[int, str, Input, float]] = []
     for definition in domain.glob("*.mxl-flow/flow_def.json"):
         try:
             value = json.loads(definition.read_text(encoding="utf-8"))
@@ -35,16 +35,20 @@ def discover_zoomiso_video(domain: pathlib.Path, active_seconds: float = 5.0) ->
             data = definition.parent / "data"
             if not match or value.get("media_type") != "video/v210" or not data.exists():
                 continue
-            if now - data.stat().st_mtime > active_seconds:
+            mtime = data.stat().st_mtime
+            if now - mtime > active_seconds:
                 continue
             flow_id = str(value["id"])
             device_id = str(value.get("device_id", ""))
             number = int(match.group(1))
-            found.append((number, device_id, Input(f"ZOOM {number}", flow_id)))
+            found.append((number, device_id, Input(f"ZOOM {number}", flow_id), mtime))
         except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
             continue
-    found.sort(key=lambda item: (item[0], item[1], item[2].flow_id))
-    return [item[2] for item in found]
+    found.sort(key=lambda item: (item[0], -item[3], item[1], item[2].flow_id))
+    unique: dict[int, Input] = {}
+    for number, _device_id, source, _mtime in found:
+        unique.setdefault(number, source)
+    return [unique[number] for number in sorted(unique)]
 
 
 class Controller:
@@ -67,17 +71,18 @@ class Controller:
             output = None if self.output is None else self.output.snapshot()
             running = self.worker is not None and self.worker.is_alive()
             return {
-                "service": "YouTube 4K eight-up",
+                "service": f"YouTube 4K {self.args.source_count}-up",
                 "configured": self.configured,
                 "running": running,
-                "ready_to_start": len(sources) >= 8 and self.configured and not running,
+                "ready_to_start": len(sources) >= self.args.source_count and self.configured and not running,
                 "source_count": len(sources),
-                "sources": [source.label for source in sources[:8]],
+                "sources": [source.label for source in sources[:self.args.source_count]],
+                "required_source_count": self.args.source_count,
                 "audio_ready": bool(self.args.audio_flow),
                 "server_url": self.server_url,
                 "profile": {
                     "canvas": "3840x2160p30",
-                    "layout": "8 sources + status tile",
+                    "layout": "2x2 native 1080p sources" if self.args.source_count == 4 else "8 sources + status tile",
                     "video": "H.264 High / NVENC / 30,000 Kbps CBR",
                     "audio": "Stereo AAC / 128 Kbps / 44.1 kHz",
                     "transport": "RTMPS",
@@ -89,13 +94,15 @@ class Controller:
     def configure_and_start(self, server_url: str, stream_key: str) -> None:
         destination_url(server_url, stream_key)
         sources = self.sources()
-        if len(sources) < 8:
-            raise ValueError(f"eight live ZoomISO video outputs are required; found {len(sources)}")
+        if len(sources) < self.args.source_count:
+            raise ValueError(
+                f"{self.args.source_count} live ZoomISO video outputs are required; found {len(sources)}"
+            )
         with self.lock:
             if self.worker is not None and self.worker.is_alive():
                 raise ValueError("output is already running")
             run_args = argparse.Namespace(**vars(self.args))
-            run_args.input = sources[:8]
+            run_args.input = sources[:self.args.source_count]
             run_args.video_flow = None
             run_args.server_url = server_url
             self.server_url = server_url
@@ -117,7 +124,7 @@ class Controller:
                 self.last_action = "Stream stopped and key forgotten"
 
 
-def page(csrf: str) -> bytes:
+def page(csrf: str, source_count: int) -> bytes:
     escaped = html.escape(csrf, quote=True)
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -133,17 +140,17 @@ label{{display:block;color:var(--muted);font-size:12px;font-weight:700;margin:13
 .status{{padding:13px;border-radius:10px;background:#09141d;border:1px solid var(--line);margin-bottom:15px}} .dot{{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--amber);margin-right:8px}} .dot.live{{background:var(--green);box-shadow:0 0 12px var(--green)}} .dot.bad{{background:var(--red)}}
 .sources{{display:grid;grid-template-columns:1fr 1fr;gap:8px}} .source{{border:1px solid var(--line);background:#09141d;border-radius:8px;padding:10px;color:var(--muted)}} .source.ok{{color:var(--text);border-color:#245d48}} .spec{{display:grid;gap:11px}} .spec div{{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:9px}} .spec span{{color:var(--muted)}} .note{{font-size:12px;color:var(--muted);margin-top:14px}} #message{{min-height:22px;color:var(--amber);margin-top:12px}}
 @media(max-width:800px){{.grid{{grid-template-columns:1fr}}.meter{{grid-template-columns:1fr 1fr}}.shell{{padding:20px}}}}
-</style></head><body><main class="shell"><header><div><div class="eyebrow">MXL SWITCHER CORE</div><h1>YouTube 4K Control</h1></div><div class="tag">Eight-up · 2160p30 · secure RTMPS</div></header>
+</style></head><body><main class="shell"><header><div><div class="eyebrow">MXL SWITCHER CORE</div><h1>YouTube 4K Control</h1></div><div class="tag">{source_count}-up · 2160p30 · secure RTMPS</div></header>
 <div class="grid"><section class="card"><h2>Destination & launch</h2><div class="status"><span id="dot" class="dot"></span><b id="state">Checking system…</b><div id="detail" class="tag"></div></div>
 <form id="launch"><label for="url">YouTube RTMPS server URL</label><input id="url" autocomplete="off" spellcheck="false" value="rtmps://a.rtmps.youtube.com/live2">
 <label for="key">Stream key</label><input id="key" type="password" autocomplete="off" placeholder="Paste key — it is kept only in memory" required>
 <div class="buttons"><button class="go" id="start" type="submit">Start stream</button><button class="stop" id="stop" type="button">Stop</button><button class="forget" id="forget" type="button">Stop + forget key</button></div></form><div id="message"></div>
 <p class="note">Set the broadcast to <b>Unlisted</b> in YouTube Studio before starting. This page is reachable only through the local SSH tunnel. The key is never returned by the API, printed, logged, placed in a command, or saved to disk.</p></section>
-<aside class="card"><h2>Transmission profile</h2><div class="meter"><div class="tile"><b id="count">0/8</b><span>live sources</span></div><div class="tile"><b>4K</b><span>3840×2160</span></div><div class="tile"><b>30</b><span>frames/sec</span></div><div class="tile"><b>30M</b><span>video bitrate</span></div></div><div id="sources" class="sources"></div><h2 style="margin-top:22px">Signal chain</h2><div class="spec"><div><span>Video</span><b>NVENC H.264 High</b></div><div><span>Audio</span><b>AAC stereo · 128K</b></div><div><span>GOP</span><b>2 seconds</b></div><div><span>Transport</span><b>RTMPS</b></div></div></aside></div></main>
+<aside class="card"><h2>Transmission profile</h2><div class="meter"><div class="tile"><b id="count">0/{source_count}</b><span>live sources</span></div><div class="tile"><b>4K</b><span>3840×2160</span></div><div class="tile"><b>30</b><span>frames/sec</span></div><div class="tile"><b>30M</b><span>video bitrate</span></div></div><div id="sources" class="sources"></div><h2 style="margin-top:22px">Signal chain</h2><div class="spec"><div><span>Video</span><b>NVENC H.264 High</b></div><div><span>Audio</span><b>AAC stereo · 128K</b></div><div><span>GOP</span><b>2 seconds</b></div><div><span>Transport</span><b>RTMPS</b></div></div></aside></div></main>
 <script>
 const csrf=document.querySelector('meta[name=csrf-token]').content,msg=document.getElementById('message');
 async function api(path,body){{const r=await fetch(path,{{method:body?'POST':'GET',headers:body?{{'content-type':'application/json','x-csrf-token':csrf}}:{{}},body:body?JSON.stringify(body):undefined,cache:'no-store'}});const j=await r.json();if(!r.ok)throw Error(j.error||'Request failed');return j}}
-async function refresh(){{try{{const s=await api('/api/state');document.getElementById('count').textContent=`${{Math.min(s.source_count,8)}}/8`;document.getElementById('url').value=s.server_url;const dot=document.getElementById('dot'),state=document.getElementById('state'),detail=document.getElementById('detail');dot.className='dot'+(s.output?.ready?' live':s.running?'':' bad');state.textContent=s.output?.ready?'LIVE — video and audio advancing':s.running?'Connecting to YouTube':s.source_count>=8?'Ready for destination':'Waiting for eight live ZoomISO outputs';detail.textContent=s.last_action;document.getElementById('start').disabled=s.running||s.source_count<8;const box=document.getElementById('sources');box.innerHTML='';for(let i=0;i<8;i++){{const d=document.createElement('div');d.className='source'+(i<s.sources.length?' ok':'');d.textContent=s.sources[i]||`INPUT ${{i+1}} — waiting`;box.appendChild(d)}}}}catch(e){{msg.textContent=e.message}}}}
+async function refresh(){{try{{const s=await api('/api/state'),required=s.required_source_count;document.getElementById('count').textContent=`${{Math.min(s.source_count,required)}}/${{required}}`;document.getElementById('url').value=s.server_url;const dot=document.getElementById('dot'),state=document.getElementById('state'),detail=document.getElementById('detail');dot.className='dot'+(s.output?.ready?' live':s.running?'':' bad');state.textContent=s.output?.ready?'LIVE — video and audio advancing':s.running?'Connecting to YouTube':s.source_count>=required?'Ready for destination':`Waiting for ${{required}} live ZoomISO outputs`;detail.textContent=s.last_action;document.getElementById('start').disabled=s.running||s.source_count<required;const box=document.getElementById('sources');box.innerHTML='';for(let i=0;i<required;i++){{const d=document.createElement('div');d.className='source'+(i<s.sources.length?' ok':'');d.textContent=s.sources[i]||`INPUT ${{i+1}} — waiting`;box.appendChild(d)}}}}catch(e){{msg.textContent=e.message}}}}
 document.getElementById('launch').onsubmit=async e=>{{e.preventDefault();msg.textContent='Starting…';try{{await api('/api/start',{{server_url:document.getElementById('url').value,stream_key:document.getElementById('key').value}});document.getElementById('key').value='';msg.textContent='Start requested. YouTube Studio should receive the signal shortly.';refresh()}}catch(e){{msg.textContent=e.message}}}};
 document.getElementById('stop').onclick=async()=>{{try{{await api('/api/stop',{{forget:false}});msg.textContent='Stop requested.';refresh()}}catch(e){{msg.textContent=e.message}}}};
 document.getElementById('forget').onclick=async()=>{{try{{await api('/api/stop',{{forget:true}});document.getElementById('key').value='';msg.textContent='Stopped. The in-memory key was forgotten.';refresh()}}catch(e){{msg.textContent=e.message}}}};
@@ -165,7 +172,7 @@ def handler_for(controller: Controller):
 
         def do_GET(self) -> None:
             if self.path == "/":
-                body = page(controller.csrf)
+                body = page(controller.csrf, controller.args.source_count)
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
@@ -210,7 +217,8 @@ def parser() -> argparse.ArgumentParser:
     result = output_parser()
     result.description = __doc__
     result.set_defaults(stream_key_file=None, port=18121)
-    result.add_argument("--active-seconds", type=float, default=5.0)
+    result.add_argument("--active-seconds", type=float, default=30.0)
+    result.add_argument("--source-count", type=int, choices=(4, 8), default=4)
     result.add_argument(
         "--container-bind", action="store_true",
         help="allow 0.0.0.0 inside a container whose port is published on host loopback only",

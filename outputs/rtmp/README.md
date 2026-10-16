@@ -7,10 +7,12 @@ uses hardware H.264 encoding, and sets the RTMPS destination through the
 GStreamer API after reading a mode-0600 secret file. The original Switcher's
 RTSP-derived, timestamp-regenerating path is retained only as a lesson.
 
-The direct eight-up mode builds a 3840x2160p30 3x3 canvas from eight MXL video
-sources. Eight 1280x720 source tiles fill the first eight cells and the ninth is
-a branded slate. The canvas feeds NVENC directly, avoiding an unnecessary 4K
-uncompressed intermediate flow while remaining independent of Core.
+The direct multi-view mode builds a 3840x2160p30 canvas from four or eight MXL
+video sources. Four-up is a 2x2 layout of native-resolution 1920x1080 tiles and
+is the preferred local proof profile. Eight-up uses eight 1280x720 tiles in a
+3x3 canvas with a branded ninth cell. Both feed NVENC directly, avoiding an
+unnecessary 4K uncompressed intermediate flow while remaining independent of
+Core.
 
 ## Boundary
 
@@ -37,7 +39,7 @@ printf '%s' "$key" > "$HOME/.youtube-stream-key"
 unset key
 ```
 
-Launch with exactly eight `--input 'LABEL=FLOW_UUID'` arguments. The canvas,
+Launch with exactly four or eight `--input 'LABEL=FLOW_UUID'` arguments. The canvas,
 Program audio, encoder, mux, and secure transport are one supervised output:
 
 ```bash
@@ -46,14 +48,12 @@ python3 outputs/rtmp/rtmps_output.py \
   --audio-flow "$PROGRAM_AUDIO_FLOW" \
   --stream-key-file "$HOME/.youtube-stream-key" \
   --input 'SOURCE 1=...' --input 'SOURCE 2=...' \
-  --input 'SOURCE 3=...' --input 'SOURCE 4=...' \
-  --input 'SOURCE 5=...' --input 'SOURCE 6=...' \
-  --input 'SOURCE 7=...' --input 'SOURCE 8=...'
+  --input 'SOURCE 3=...' --input 'SOURCE 4=...'
 ```
 
 For the operator path, launch `youtube_control.py` with the shared MXL domain
 and Program audio flow. It serves a loopback-only control window on port 18121,
-automatically discovers eight active ZoomISO video outputs, and accepts the
+automatically discovers four active ZoomISO video outputs by default, and accepts the
 YouTube RTMPS server and masked stream key. The key remains only in process
 memory and is never returned by the API, logged, written to disk, or placed in
 process arguments. Use an SSH tunnel rather than exposing the control port:
@@ -63,6 +63,10 @@ ssh -N -L 18121:127.0.0.1:18121 media-host
 ```
 
 Then open `http://127.0.0.1:18121/`.
+
+Use `--source-count 8` to select the original eight-up layout. Discovery keeps
+one freshest writer for each numbered ZoomISO output and tolerates the source's
+normal metadata update cadence without presenting duplicate inputs.
 
 When containerized, bind the process to `0.0.0.0` with the explicit
 `--container-bind` acknowledgement, but publish it only as
