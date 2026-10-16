@@ -1,0 +1,16 @@
+FROM mxl-lab:latest
+
+ARG NVIDIA_DRIVER_SERIES=550
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        "libnvidia-compute-${NVIDIA_DRIVER_SERIES}" \
+        "libnvidia-encode-${NVIDIA_DRIVER_SERIES}" \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY common /app/common
+COPY outputs/rtmp /app/outputs/rtmp
+ENV PYTHONPATH=/app
+
+ENTRYPOINT ["python3", "/app/outputs/rtmp/rtmps_output.py"]

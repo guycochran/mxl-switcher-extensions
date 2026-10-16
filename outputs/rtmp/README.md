@@ -57,6 +57,11 @@ applied inside the process.
 Health is loopback-only on port 18120. A green readiness response requires
 advancing encoded video, advancing encoded audio, and fresh mux output.
 
+`Dockerfile.nvidia` layers the userspace CUDA/NVENC libraries that match the
+Ubuntu 24.04 NVIDIA 550 guest driver onto the existing MXL media image. Run the
+container with the NVIDIA character devices made available by the host; do not
+use a privileged container.
+
 ## Secret contract
 
 - The stream key is a secret reference, not ordinary configuration.
