@@ -71,6 +71,12 @@ def pipeline_description(args: argparse.Namespace) -> str:
                 f"sink_{index}::ypos={y}",
                 f"sink_{index}::width={tile_width}",
                 f"sink_{index}::height={tile_height}",
+                f"sink_{index}::zorder={index + 1}",
+            ])
+        if len(inputs) == 4:
+            parts.extend([
+                "sink_4::xpos=0", "sink_4::ypos=0",
+                "sink_4::width=3840", "sink_4::height=2160", "sink_4::zorder=0",
             ])
         parts.extend([
             f"! video/x-raw,format=BGRA,width=3840,height=2160,framerate={args.rate}",
@@ -125,6 +131,13 @@ def pipeline_description(args: argparse.Namespace) -> str:
                 f"! gdkpixbufoverlay location={brand}",
                 "! queue max-size-buffers=2 leaky=downstream ! mix.sink_8",
             ])
+        else:
+            parts.extend([
+                "videotestsrc is-live=true pattern=black",
+                f"! video/x-raw,format=BGRA,width=16,height=16,framerate={args.rate}",
+                "! queue max-size-buffers=2 leaky=downstream",
+                "! mix.sink_4",
+            ])
     return " ".join(parts)
 
 
@@ -143,6 +156,9 @@ class Output:
         self.started_at = time.monotonic()
         self.last_mux_at = 0.0
         self.counts = {"video": 0, "audio": 0, "mux_buffers": 0, "mux_bytes": 0}
+        self.rate_sample_at = self.started_at
+        self.rate_sample_counts = {"video": 0, "audio": 0, "mux_bytes": 0}
+        self.rates = {"video_fps": 0.0, "audio_buffers_per_second": 0.0, "mux_kbps": 0.0}
 
     def _redact(self, value: object) -> str:
         return str(value).replace(self.stream_key, "<redacted>").replace(
@@ -232,10 +248,28 @@ class Output:
         with self.lock:
             now = time.monotonic()
             mux_age = None if not self.last_mux_at else now - self.last_mux_at
+            elapsed = now - self.rate_sample_at
+            if elapsed >= 1.0:
+                self.rates = {
+                    "video_fps": (self.counts["video"] - self.rate_sample_counts["video"]) / elapsed,
+                    "audio_buffers_per_second": (
+                        self.counts["audio"] - self.rate_sample_counts["audio"]
+                    ) / elapsed,
+                    "mux_kbps": (
+                        (self.counts["mux_bytes"] - self.rate_sample_counts["mux_bytes"])
+                        * 8 / elapsed / 1000
+                    ),
+                }
+                self.rate_sample_at = now
+                self.rate_sample_counts = {
+                    "video": self.counts["video"],
+                    "audio": self.counts["audio"],
+                    "mux_bytes": self.counts["mux_bytes"],
+                }
             ready = (
                 self.state == "streaming"
-                and self.counts["video"] > 0
-                and self.counts["audio"] > 0
+                and self.rates["video_fps"] >= 25.0
+                and self.rates["audio_buffers_per_second"] >= 20.0
                 and mux_age is not None
                 and mux_age < 5.0
             )
@@ -253,6 +287,7 @@ class Output:
                     "audio_rate_hz": self.args.audio_rate_hz,
                     "resolution": "3840x2160", "frame_rate": self.args.rate,
                     "queue_bound_ns": QUEUE_NS,
+                    **{name: round(value, 3) for name, value in self.rates.items()},
                 },
             }
 

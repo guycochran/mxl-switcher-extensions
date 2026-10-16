@@ -68,8 +68,9 @@ class RTMPSOutputTests(unittest.TestCase):
             self.assertIn("sink_3::xpos=1920 sink_3::ypos=1080", description)
             self.assertIn("sink_3::width=1920 sink_3::height=1080", description)
             self.assertIn("width=1920,height=1080,framerate=30/1", description)
-            self.assertNotIn("videotestsrc", description)
-            self.assertNotIn("mix.sink_4", description)
+            self.assertIn("videotestsrc is-live=true pattern=black", description)
+            self.assertIn("sink_4::width=3840 sink_4::height=2160", description)
+            self.assertIn("sink_4::zorder=0", description)
 
     def test_stream_key_requires_private_regular_file(self):
         with tempfile.TemporaryDirectory() as directory:
