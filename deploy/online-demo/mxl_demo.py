@@ -373,6 +373,10 @@ def commands(cfg: dict, resolved: dict) -> list[list[str]]:
     common = ["--restart=unless-stopped"]
     result = [
         docker(cfg, "run", "-d", "--name", names["core"], *common, "--network", "host",
+               "--health-cmd", "python3 -c \"import urllib.request; "
+               f"urllib.request.urlopen('http://127.0.0.1:{cfg['core_port']}/api/mxl/v1/health', timeout=1).read()\"",
+               "--health-interval", "5s", "--health-timeout", "2s",
+               "--health-start-period", "10s", "--health-retries", "3",
                "-v", mount, "-v", f"{state / 'core.conf'}:/etc/mxl-switcher-core.conf:ro",
                "-v", f"{state / 'definitions'}:/etc/mxl-switcher-core/definitions:ro",
                cfg["core_image"], "--config", "/etc/mxl-switcher-core.conf"),

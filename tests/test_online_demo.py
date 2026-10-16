@@ -115,6 +115,8 @@ class OnlineDemoTests(unittest.TestCase):
         commands = demo.commands(cfg, resolved)
         rendered = "\n".join(demo.quote(command) for command in commands)
         self.assertEqual(len(commands), 7)
+        self.assertIn("http://127.0.0.1:18085/api/mxl/v1/health", rendered)
+        self.assertIn("--health-start-period 10s", rendered)
         self.assertIn("test-demo-multiview-confidence", rendered)
         self.assertIn("--layout wall", rendered)
         self.assertIn("rtmp://127.0.0.1:1935/mxl-multiview", rendered)
