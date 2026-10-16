@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "program-rtmps-output",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "kind": "output",
   "maturity": "prototype",
   "requires_core_api": "^1.0",
@@ -14,6 +14,6 @@
     "readiness_path": "/api/v1/health/ready",
     "bind_scope": "loopback"
   },
-  "external_dependencies": ["GStreamer 1.24+", "gst-mxl-rs mxlsrc", "NVENC H.264 encoder", "RTMPS sink"],
+  "external_dependencies": ["GStreamer 1.24+", "gst-mxl-rs mxlsrc", "x264 CPU or NVENC H.264 encoder", "RTMPS sink"],
   "secret_refs": ["in-memory-rtmps-stream-key"]
 }

@@ -8,7 +8,7 @@ GStreamer API on the modern `rtmp2sink` implementation after reading a
 mode-0600 secret file. The original Switcher's
 RTSP-derived, timestamp-regenerating path is retained only as a lesson.
 
-The direct multi-view mode builds a 3840x2160p30 canvas from four or eight MXL
+The direct multi-view mode builds a 3840x2160 canvas at 30000/1001 fps from four or eight MXL
 video sources. Four-up is a 2x2 layout of native-resolution 1920x1080 tiles and
 is the preferred local proof profile. Eight-up uses eight 1280x720 tiles in a
 3x3 canvas with a branded ninth cell and a visibly advancing running timecode.
@@ -25,7 +25,7 @@ or cloud credentials to Core.
 
 A destination profile explicitly selects resolution, frame rate, H.264
 bitrate/profile, GOP duration, AAC bitrate/sample rate, reconnect policy, and
-the target service. The YouTube 4K prototype is 3840x2160p30, H.264 High at
+the target service. The YouTube 4K prototype is 3840x2160 at 30000/1001 fps, H.264 High at
 30,000 Kbps CBR, a two-second GOP, two B-frames, and stereo AAC at 128 Kbps /
 48 kHz. Keeping the destination at Core's native Program rate avoids an
 unnecessary rate conversion at the final output boundary. Service-specific

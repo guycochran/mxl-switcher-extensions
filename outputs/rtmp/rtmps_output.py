@@ -533,7 +533,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--video-bitrate-kbps", type=int, default=30000)
     result.add_argument("--audio-bitrate-bps", type=int, default=128000)
     result.add_argument("--audio-rate-hz", type=int, default=48000)
-    result.add_argument("--rate", default="30/1")
+    result.add_argument("--rate", default="30000/1001")
     result.add_argument("--bind", default="127.0.0.1")
     result.add_argument("--port", type=int, default=18120)
     result.add_argument("--max-retry-seconds", type=float, default=30.0)

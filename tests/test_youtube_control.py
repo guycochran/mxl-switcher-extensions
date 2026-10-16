@@ -79,6 +79,7 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertEqual(args.source_count, 4)
         self.assertEqual(args.active_seconds, 30.0)
         self.assertEqual(args.audio_rate_hz, 48000)
+        self.assertEqual(args.rate, "30000/1001")
         self.assertIsNone(args.preferred_flow)
 
 
