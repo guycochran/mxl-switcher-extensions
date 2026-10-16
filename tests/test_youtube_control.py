@@ -42,11 +42,16 @@ class YouTubeControlTests(unittest.TestCase):
             found = control.discover_zoomiso_video(pathlib.Path(directory), active_seconds=5)
             self.assertEqual([item.flow_id for item in found], ["flow-1a", "flow-2"])
 
-    def make_audio_flow(self, root, flow_id, media_type="audio/float32", age=0):
+    def make_audio_flow(
+        self, root, flow_id, media_type="audio/float32", age=0,
+        output=None, device="audio-device",
+    ):
         directory = pathlib.Path(root) / f"{flow_id}.mxl-flow"
         directory.mkdir()
+        label = "Program Audio" if output is None else f"ZoomISO Cloud Instance Output {output} Audio"
         (directory / "flow_def.json").write_text(json.dumps({
-            "id": flow_id, "label": "Program Audio", "media_type": media_type,
+            "id": flow_id, "label": label, "media_type": media_type,
+            "device_id": device,
         }), encoding="utf-8")
         data = directory / "data"
         data.write_bytes(b"")
@@ -86,6 +91,30 @@ class YouTubeControlTests(unittest.TestCase):
                 )
             self.assertIsNone(controller.worker)
             self.assertFalse(controller.configured)
+
+    def test_mix_source_audio_pairs_every_selected_video_device(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = control.parser().parse_args([
+                "--domain", directory, "--audio-flow", "fallback",
+                "--source-count", "4", "--active-seconds", "5",
+                "--mix-source-audio",
+            ])
+            for output in range(1, 5):
+                device = f"device-{output}"
+                self.make_flow(directory, f"video-{output}", output, device)
+                self.make_audio_flow(
+                    directory, f"audio-{output}", output=output, device=device,
+                )
+            controller = control.Controller(args)
+            sources = controller.sources()
+            self.assertEqual(
+                controller.audio_flows(sources),
+                ["audio-1", "audio-2", "audio-3", "audio-4"],
+            )
+            self.assertTrue(controller.audio_ready())
+            snapshot = controller.snapshot()
+            self.assertEqual(snapshot["audio_source_count"], 4)
+            self.assertIn("4-source Program mix", snapshot["profile"]["audio"])
 
     def test_page_has_masked_key_and_never_embeds_a_key_value(self):
         body = control.page("csrf-value", 4).decode("utf-8")
@@ -130,6 +159,8 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertEqual(args.rate, "30000/1001")
         self.assertEqual(args.video_encoder, "x264enc")
         self.assertIsNone(args.preferred_flow)
+        self.assertEqual(args.audio_flow, ["audio-id"])
+        self.assertFalse(args.mix_source_audio)
 
 
 if __name__ == "__main__":

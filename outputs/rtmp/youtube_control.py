@@ -21,6 +21,7 @@ from youtube_8up_canvas import Input
 
 
 FLOW_LABEL = re.compile(r"^ZoomISO Cloud Instance Output (\d+) Video$")
+AUDIO_FLOW_LABEL = re.compile(r"^ZoomISO Cloud Instance Output (\d+) Audio$")
 MAX_REQUEST_BYTES = 8192
 
 
@@ -73,6 +74,46 @@ def audio_flow_active(
         return False
 
 
+def discover_paired_audio(
+    domain: pathlib.Path,
+    sources: list[Input],
+    active_seconds: float = 30.0,
+) -> list[str]:
+    """Return active audio flows paired to selected video devices, in video order."""
+    now = time.time()
+    video_devices: dict[str, str] = {}
+    audio_by_device: dict[str, tuple[float, str]] = {}
+    for definition in domain.glob("*.mxl-flow/flow_def.json"):
+        try:
+            value = json.loads(definition.read_text(encoding="utf-8"))
+            flow_id = str(value.get("id", ""))
+            device_id = str(value.get("device_id", ""))
+            data = definition.parent / "data"
+            if not flow_id or not device_id or not data.exists():
+                continue
+            mtime = data.stat().st_mtime
+            if now - mtime > active_seconds:
+                continue
+            if value.get("media_type") == "video/v210":
+                video_devices[flow_id] = device_id
+            elif (
+                value.get("media_type") == "audio/float32"
+                and AUDIO_FLOW_LABEL.match(str(value.get("label", "")))
+            ):
+                previous = audio_by_device.get(device_id)
+                if previous is None or mtime > previous[0]:
+                    audio_by_device[device_id] = (mtime, flow_id)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+    result: list[str] = []
+    for source in sources:
+        device_id = video_devices.get(source.flow_id)
+        paired = None if device_id is None else audio_by_device.get(device_id)
+        if paired is not None:
+            result.append(paired[1])
+    return result
+
+
 class Controller:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
@@ -92,12 +133,27 @@ class Controller:
         )
 
     def audio_ready(self) -> bool:
-        return audio_flow_active(
-            pathlib.Path(self.args.domain), self.args.audio_flow, self.args.active_seconds
+        sources = self.sources()[:self.args.source_count]
+        flows = self.audio_flows(sources)
+        return len(flows) == self.args.source_count if self.args.mix_source_audio else all(
+            audio_flow_active(pathlib.Path(self.args.domain), flow, self.args.active_seconds)
+            for flow in flows
         )
+
+    def audio_flows(self, sources: list[Input] | None = None) -> list[str]:
+        if self.args.mix_source_audio:
+            return discover_paired_audio(
+                pathlib.Path(self.args.domain),
+                sources if sources is not None else self.sources()[:self.args.source_count],
+                self.args.active_seconds,
+            )
+        value = self.args.audio_flow
+        return [value] if isinstance(value, str) else list(value or [])
 
     def snapshot(self) -> dict[str, Any]:
         sources = self.sources()
+        selected_sources = sources[:self.args.source_count]
+        audio_flows = self.audio_flows(selected_sources)
         audio_ready = self.audio_ready()
         encoder_label = (
             f"H.264 High / x264 CPU / {self.args.video_bitrate_kbps:,} Kbps CBR"
@@ -119,12 +175,16 @@ class Controller:
                 "sources": [source.label for source in sources[:self.args.source_count]],
                 "required_source_count": self.args.source_count,
                 "audio_ready": audio_ready,
+                "audio_source_count": len(audio_flows),
                 "server_url": self.server_url,
                 "profile": {
                     "canvas": "3840x2160p30",
                     "layout": "2x2 native 1080p sources" if self.args.source_count == 4 else "8 sources + status tile",
                     "video": encoder_label,
-                    "audio": f"Stereo AAC / 128 Kbps / {self.args.audio_rate_hz / 1000:g} kHz",
+                    "audio": (
+                        f"{len(audio_flows)}-source Program mix / stereo AAC / "
+                        f"128 Kbps / {self.args.audio_rate_hz / 1000:g} kHz"
+                    ),
                     "transport": "RTMPS",
                 },
                 "last_action": self.last_action,
@@ -139,12 +199,13 @@ class Controller:
                 f"{self.args.source_count} live ZoomISO video outputs are required; found {len(sources)}"
             )
         if not self.audio_ready():
-            raise ValueError("the configured Program audio flow is missing, not audio, or not advancing")
+            raise ValueError("one or more required Program audio flows are missing or not advancing")
         with self.lock:
             if self.worker is not None and self.worker.is_alive():
                 raise ValueError("output is already running")
             run_args = argparse.Namespace(**vars(self.args))
             run_args.input = sources[:self.args.source_count]
+            run_args.audio_flow = self.audio_flows(run_args.input)
             run_args.video_flow = None
             run_args.server_url = server_url
             self.server_url = server_url
@@ -278,6 +339,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--preferred-flow", action="append",
         help="restrict automatic discovery to an explicitly selected ZoomISO video flow",
+    )
+    result.add_argument(
+        "--mix-source-audio", action="store_true",
+        help="mix the active ZoomISO audio flow paired with every selected video source",
     )
     result.add_argument(
         "--container-bind", action="store_true",

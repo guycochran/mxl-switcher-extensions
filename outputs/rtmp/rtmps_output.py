@@ -31,6 +31,14 @@ RTMP_CHUNK_SIZE = 4096
 AAC_FRAME_SAMPLES = 1024
 
 
+def audio_flow_ids(args: argparse.Namespace) -> list[str]:
+    """Normalize the legacy single audio-flow value and repeated CLI values."""
+    value = args.audio_flow
+    if isinstance(value, str):
+        return [value]
+    return list(value or [])
+
+
 def current_rss_mib() -> float:
     """Return current process RSS on Linux, with a portable peak-RSS fallback."""
     try:
@@ -194,14 +202,42 @@ def pipeline_description(args: argparse.Namespace) -> str:
         "! video/x-h264,profile=high,stream-format=byte-stream,alignment=au",
         "! identity name=encoded_video silent=true ! h264parse config-interval=-1",
         "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 ! mux.video",
-        f"mxlsrc domain={args.domain} audio-flow-id={args.audio_flow} automatic-eos=false",
-        "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 leaky=downstream",
-        "! audioconvert ! audioresample quality=10",
-        f"! audio/x-raw,rate={args.audio_rate_hz},channels=2",
-        f"! avenc_aac bitrate={args.audio_bitrate_bps}",
-        "! identity name=encoded_audio silent=true ! aacparse",
-        "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 ! mux.audio",
     ])
+    audio_flows = audio_flow_ids(args)
+    if not audio_flows:
+        raise ValueError("at least one audio flow is required")
+    if len(audio_flows) == 1:
+        parts.extend([
+            f"mxlsrc domain={args.domain} audio-flow-id={audio_flows[0]} automatic-eos=false",
+            "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 leaky=downstream",
+            "! audioconvert ! audioresample quality=10",
+            f"! audio/x-raw,rate={args.audio_rate_hz},channels=2",
+            f"! avenc_aac bitrate={args.audio_bitrate_bps}",
+            "! identity name=encoded_audio silent=true ! aacparse",
+            "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 ! mux.audio",
+        ])
+    else:
+        parts.extend([
+            "audiomixer name=program_audio_mix force-live=true ignore-inactive-pads=true",
+            "latency=100000000 output-buffer-duration=10000000",
+            "! audioconvert",
+            f"! audio/x-raw,format=F32LE,layout=interleaved,rate={args.audio_rate_hz},channels=2",
+            # Sum in float, then apply a non-clipping safety limiter before AAC.
+            # This preserves a single talker at unity while protecting the mix
+            # when multiple isolated participant feeds speak together.
+            "! rglimiter",
+            f"! avenc_aac bitrate={args.audio_bitrate_bps}",
+            "! identity name=encoded_audio silent=true ! aacparse",
+            "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 ! mux.audio",
+        ])
+        for index, flow_id in enumerate(audio_flows):
+            parts.extend([
+                f"mxlsrc domain={args.domain} audio-flow-id={flow_id} automatic-eos=false",
+                "! queue max-size-time=200000000 max-size-buffers=0 max-size-bytes=0 leaky=downstream",
+                "! audioconvert ! audioresample quality=10",
+                f"! audio/x-raw,format=F32LE,layout=interleaved,rate={args.audio_rate_hz},channels=2",
+                f"! queue max-size-time=200000000 max-size-buffers=0 max-size-bytes=0 leaky=downstream ! program_audio_mix.sink_{index}",
+            ])
     if inputs:
         asset_dir = pathlib.Path(args.assets_dir)
         for index, source in enumerate(inputs):
@@ -611,7 +647,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--domain", default="/mxl-domain")
     result.add_argument("--video-flow")
     result.add_argument("--input", action="append", type=parse_input)
-    result.add_argument("--audio-flow", required=True)
+    result.add_argument("--audio-flow", action="append", required=True)
     result.add_argument("--stream-key-file", type=pathlib.Path, required=True)
     result.add_argument("--server-url", default="rtmps://a.rtmps.youtube.com/live2")
     result.add_argument("--destination-label", default="YouTube Live")

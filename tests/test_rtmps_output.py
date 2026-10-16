@@ -70,6 +70,18 @@ class RTMPSOutputTests(unittest.TestCase):
     def test_rtmp_pacing_has_two_times_stream_rate_headroom(self):
         self.assertEqual(rtmps.rtmp_peak_kbps(self.args()), 60256)
 
+    def test_multiple_audio_flows_are_mixed_and_limited_before_aac(self):
+        args = self.args()
+        args.audio_flow = [f"audio-{index}" for index in range(1, 9)]
+        description = rtmps.pipeline_description(args)
+        self.assertEqual(description.count("audio-flow-id="), 8)
+        self.assertIn("audiomixer name=program_audio_mix", description)
+        self.assertIn("force-live=true ignore-inactive-pads=true", description)
+        self.assertIn("audio/x-raw,format=F32LE", description)
+        self.assertIn("rglimiter", description)
+        self.assertEqual(description.count("program_audio_mix.sink_"), 8)
+        self.assertLess(description.index("rglimiter"), description.index("avenc_aac"))
+
     def test_direct_canvas_has_eight_sources_and_no_intermediate_mxl_sink(self):
         with tempfile.TemporaryDirectory() as directory:
             args = self.args()
