@@ -201,7 +201,7 @@ no private source tree or saved runtime configuration was reused.
   encoder was idle because no stream key was entered during this rehearsal.
 - `down --apply` removed all seven and only the seven rehearsal-owned
   containers. Both pre-existing ZoomISO instances remained running with zero
-  restarts.
+  restarts. The metered test VM was then verified `Stopped (deallocated)`.
 
 The runtime design is cloud-provider neutral: it uses x86-64 Linux, Docker,
 loopback services, and one host-local MXL shared-memory domain rather than an
