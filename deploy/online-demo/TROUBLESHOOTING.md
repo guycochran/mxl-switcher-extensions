@@ -7,7 +7,8 @@ discovered flow IDs by hand.
 | --- | --- | --- |
 | `init` cannot find a domain | Docker is unavailable, the volume name is unusual, or its mount is unreadable | Start Docker. Run `docker volume ls`, then rerun `init --domain-volume NAME` with the same account that will operate the demo. |
 | `init` or `doctor` says the MXL domain is not readable | Docker volumes live below a root-only directory; Docker access alone does not grant file access | Run `init` and every later command with one account that can read the volume, for example `sudo python3 deploy/online-demo/mxl_demo.py init`. Do not loosen permissions on Docker's storage directory. |
-| Licensed base image is missing | The MXL SDK runtime image has not been loaded on this host | Load the licensed image and rerun `init`, or supply its local tag with `--base-image`. The repository cannot redistribute it. |
+| Licensed base image is missing | The MXL SDK runtime image has not been loaded on this host | Load the licensed image and rerun `init`, or supply its local tag with `--base-image`. The repository cannot redistribute it; see [`BASE_IMAGE.md`](BASE_IMAGE.md). |
+| Doctor reports a base-image contract failure | The image exists but lacks an SDK library/header, build tool, Python module, GStreamer version/element, or Cairo | Use the missing-item list from `doctor` to repair the private image, then rerun `doctor`. Do not proceed with a name-only image check. |
 | Doctor reports fewer than 4/8 paired sources | Wrong meeting, capture not authorized, outputs not mapped, audio/video pairing differs, or flows are stale | Confirm the intended meeting is active, authorize capture, map every numbered row to MXL video with matching audio, and wait for incoming-video activity before retrying. |
 | ZoomISO **Join** spins indefinitely | The meeting is not active, the wrong meeting was selected, or the ZoomISO session is stale | Confirm the meeting link and host state. Restart only the ZoomISO instance if its UI remains stuck, then authorize and remap. Do not restart Core or unrelated infrastructure first. |
 | ZoomISO warns about an NDI Discovery Server | An output was changed to NDI | For this workflow select **MXL**. NDI discovery is not used by the native MXL path. |
@@ -19,6 +20,7 @@ discovered flow IDs by hand.
 | A configured port is occupied | Another deployment or service already owns it | Choose unused ports in `demo-config.json`. Do not stop the existing service merely to satisfy this demo. |
 | Meeting resets during a run | The external test meeting or ZoomISO flow epoch changed | Run `down`, rejoin and remap, wait for advancing inputs, then run `up` and `check` again. |
 | `down` refuses a same-named container | The container is not labelled as owned by this deployment | Leave it untouched. Change `deployment_id` or have its actual owner remove it. |
+| State seems to disappear when using `sudo` | `sudo` changed `HOME`, so relative config/state paths resolve for a different account | Use one account for every command. If privilege is required, use absolute `--config` and `state_dir` paths and keep ownership consistent. |
 
 ## Collecting a useful result
 

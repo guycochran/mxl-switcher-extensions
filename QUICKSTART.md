@@ -13,11 +13,17 @@ stores meeting credentials or streaming credentials.
 
 ## Before you begin
 
-Use a Linux host with Docker, Git, Python 3, the licensed MXL runtime image,
+Use a Linux host with Docker, Git, Python 3, an operator-supplied licensed MXL
+runtime image,
 and a running licensed ZoomISO Cloud container. The demonstrated eight-source
 CPU profile used 32 modern logical CPUs and 128 GiB RAM; four sources can use a
 smaller host, but leave encoding headroom. No GPU is required for the proven
 CPU path.
+
+The default image name `mxl-lab:latest` is a local lab convention, not a public
+download. Before using another tag, read the exact
+[licensed base-image contract](deploy/online-demo/BASE_IMAGE.md). `doctor`
+checks that contract inside the image before it permits a build or launch.
 
 ## 1. Clone and initialize
 
@@ -34,14 +40,21 @@ and prints the exact flag required. Examples:
 
 ```sh
 python3 deploy/online-demo/mxl_demo.py init --domain-volume VOLUME_NAME
+python3 deploy/online-demo/mxl_demo.py init --domain-path /absolute/mxl/domain
 python3 deploy/online-demo/mxl_demo.py init --source-count 4
 python3 deploy/online-demo/mxl_demo.py init --base-image YOUR_MXL_IMAGE
 ```
 
-The selected MXL volume must be readable by the account running the launcher.
+Use `--domain-path` when ZoomISO exposes the MXL domain as a host bind mount or
+tmpfs rather than a named Docker volume. Select exactly one domain source.
+
+The selected MXL domain must be readable by the account running the launcher.
 If Docker stores it below a root-only directory, run the complete workflow
-consistently with the appropriately privileged account. The generated file
-contains no credentials or flow UUIDs.
+consistently with the appropriately privileged account. Running with `sudo`
+changes `HOME`, so the ignored config and private `state_dir` will belong to
+root unless you give `--config` an absolute path and set an explicit absolute
+`state_dir`. Do not mix privileged and unprivileged lifecycle commands. The
+generated file contains no credentials or flow UUIDs.
 
 ## 2. Prepare ZoomISO
 
@@ -68,6 +81,9 @@ python3 deploy/online-demo/mxl_demo.py up --config demo-config.json --apply
 local images, discovers only live paired ZoomISO outputs, writes private runtime
 configuration, and starts the seven labelled services. It stops on the first
 failed prerequisite rather than leaving a partial deployment.
+
+`plan` also performs fresh source discovery every time. It never reuses a
+previous session's `resolved.json`, even if that file still exists.
 
 Open both through an SSH tunnel rather than exposing them publicly:
 

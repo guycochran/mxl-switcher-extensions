@@ -221,7 +221,8 @@ class OnlineDemoTests(unittest.TestCase):
              mock.patch.object(demo, "discover_domain_volumes", return_value=["zoomiso-domain"]), \
              mock.patch.object(demo, "volume_mountpoint", return_value=str(self.domain)), \
              mock.patch.object(demo, "image_exists", return_value=True):
-            demo.init_config(target, domain_volume=None, base_image="mxl-lab:latest",
+            demo.init_config(target, domain_volume=None, domain_path=None,
+                             base_image="mxl-lab:latest",
                              source_count=4, force=False)
         value = json.loads(target.read_text())
         self.assertEqual(value["domain_mount_source"], "zoomiso-domain")
@@ -235,12 +236,32 @@ class OnlineDemoTests(unittest.TestCase):
         with mock.patch.object(demo, "detect_docker_command", return_value=["docker"]), \
              mock.patch.object(demo, "discover_domain_volumes", return_value=["one", "two"]):
             with self.assertRaisesRegex(RuntimeError, "--domain-volume"):
-                demo.init_config(target, domain_volume=None, base_image="mxl-lab:latest",
+                demo.init_config(target, domain_volume=None, domain_path=None,
+                                 base_image="mxl-lab:latest",
                                  source_count=8, force=False)
         target.write_text("{}")
         with self.assertRaisesRegex(RuntimeError, "--force"):
-            demo.init_config(target, domain_volume="one", base_image="mxl-lab:latest",
+            demo.init_config(target, domain_volume="one", domain_path=None,
+                             base_image="mxl-lab:latest",
                              source_count=8, force=False)
+
+    def test_init_supports_a_direct_mxl_domain_path(self):
+        target = self.root / "bind-config.json"
+        with mock.patch.object(demo, "detect_docker_command", return_value=["docker"]), \
+             mock.patch.object(demo, "image_exists", return_value=True):
+            demo.init_config(target, domain_volume=None, domain_path=str(self.domain),
+                             base_image="mxl-lab:latest", source_count=4, force=False)
+        value = json.loads(target.read_text())
+        expected = str(self.domain.resolve())
+        self.assertEqual(value["domain_host_path"], expected)
+        self.assertEqual(value["domain_mount_source"], expected)
+
+    def test_init_refuses_both_domain_selectors(self):
+        with mock.patch.object(demo, "detect_docker_command", return_value=["docker"]):
+            with self.assertRaisesRegex(RuntimeError, "exactly one"):
+                demo.init_config(self.root / "bad.json", domain_volume="one",
+                                 domain_path=str(self.domain), base_image="mxl-lab:latest",
+                                 source_count=4, force=False)
 
     def test_up_runs_guarded_sequence_and_aliases_are_simple(self):
         cfg = demo.load_config(self.config_file)
@@ -273,7 +294,8 @@ class OnlineDemoTests(unittest.TestCase):
              mock.patch.object(demo, "volume_mountpoint", return_value=str(self.domain)), \
              denied:
             with self.assertRaisesRegex(RuntimeError, "not readable.*sudo python3"):
-                demo.init_config(target, domain_volume=None, base_image="mxl-lab:latest",
+                demo.init_config(target, domain_volume=None, domain_path=None,
+                                 base_image="mxl-lab:latest",
                                  source_count=4, force=False)
         self.assertFalse(target.exists())
 
@@ -291,6 +313,29 @@ class OnlineDemoTests(unittest.TestCase):
              mock.patch.object(demo, "discover", return_value=[]):
             demo.doctor(cfg)
         self.assertEqual(checked, ["docker", "git"])
+
+    def test_doctor_probes_the_licensed_base_image_contract(self):
+        cfg = demo.load_config(self.config_file)
+        with mock.patch.object(demo.shutil, "which", return_value="/usr/bin/tool"), \
+             mock.patch.object(demo, "discover", return_value=demo.discover(cfg)), \
+             mock.patch.object(demo, "image_exists", return_value=True), \
+             mock.patch.object(demo, "base_image_contract",
+                               return_value=(False, "gstreamer:mxlsrc")) as probe, \
+             mock.patch.object(demo.subprocess, "run",
+                               return_value=demo.subprocess.CompletedProcess([], 0)):
+            self.assertEqual(demo.doctor(cfg), 1)
+        probe.assert_called_once_with(cfg)
+
+    def test_plan_rediscovers_current_flows(self):
+        cfg = demo.load_config(self.config_file)
+        stale = pathlib.Path(cfg["state_dir"])
+        stale.mkdir()
+        (stale / "resolved.json").write_text(json.dumps({"sources": [{"flow_id": "stale"}]}))
+        with mock.patch.object(demo, "load_config", return_value=cfg), \
+             mock.patch.object(demo, "prepare", wraps=demo.prepare) as prepare, \
+             mock.patch.object(demo, "run"):
+            self.assertEqual(demo.main(["plan", "--config", str(self.config_file)]), 0)
+        prepare.assert_called_once_with(cfg)
 
     def test_launch_removes_a_deployment_whose_container_exits_after_start(self):
         cfg = demo.load_config(self.config_file)
