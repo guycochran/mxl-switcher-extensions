@@ -40,6 +40,12 @@ Every package README and manifest uses one of these labels:
 An empty package directory does not claim implementation. Proprietary SDKs,
 licensed applications, credentials, and hardware drivers are never vendored.
 
+`scripts/check_profile.py` is the release truth check. It returns nonzero when
+a profile uses a mutable Core ref, selects a package below candidate maturity,
+or selects a package without an entrypoint. This lets the broad workflow
+profiles remain useful roadmaps without accidentally presenting them as
+reproducible releases.
+
 ## Architectural rule
 
 Extensions are processes beside Core, never plugins inside its media hot path.
