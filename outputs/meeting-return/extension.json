@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "name": "program-meeting-return",
+  "version": "0.1.0",
+  "kind": "output",
+  "maturity": "concept",
+  "requires_core_api": "^1.0",
+  "entrypoint": null,
+  "capabilities": [
+    "program.video.read",
+    "program.audio.read",
+    "meeting.camera.send",
+    "meeting.microphone.send",
+    "clock.paired.schedule",
+    "health.publish"
+  ],
+  "flow_roles": {
+    "reads": ["program.video", "program.audio"],
+    "publishes": []
+  },
+  "external_dependencies": [
+    "MXL runtime",
+    "ZoomISO Cloud or compatible meeting SDK runtime"
+  ],
+  "secret_refs": ["meeting-auth"]
+}

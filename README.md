@@ -66,4 +66,10 @@ finalization smoke. It remains below candidate maturity until stable switched
 Program Audio, measured A/V skew/drop telemetry, and staged duration gates are
 complete.
 
+The [meeting-return output](outputs/meeting-return) now has a versioned concept
+manifest and paired-clock acceptance contract. Its sender side has passed an
+isolated hold, but the independent audience gate exposed accumulating A/V error
+after the meeting boundary. It remains a concept until one shared-clock adapter
+passes deterministic callback-jitter, local-loopback, and real audience gates.
+
 License: MIT.
