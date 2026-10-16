@@ -72,4 +72,12 @@ isolated hold, but the independent audience gate exposed accumulating A/V error
 after the meeting boundary. It remains a concept until one shared-clock adapter
 passes deterministic callback-jitter, local-loopback, and real audience gates.
 
+The shared operational layer is implemented today: manifests declare common
+state/liveness/readiness paths, adapters can use the thread-safe lifecycle and
+bounded restart primitives in `common/`, and `scripts/check_health.py` provides
+a fail-closed one-shot promotion check. The reference Skin in Core can display
+these independently supervised adapters on its EIC dashboard. This is plumbing
+for reliable bolt-ons, not a claim that every transport pictured above is
+already implemented.
+
 License: MIT.
