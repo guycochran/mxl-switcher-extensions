@@ -9,7 +9,6 @@ the partial Matroska file only after GStreamer has finalized it.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import pathlib
 import shutil
@@ -18,8 +17,10 @@ import subprocess
 import threading
 import time
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from typing import Any
+
+from common.health import handler_for_snapshot
 
 
 QUEUE_NS = 2_000_000_000
@@ -294,20 +295,7 @@ class Recorder:
 
 
 def handler_for(recorder: Recorder):
-    class Handler(BaseHTTPRequestHandler):
-        def _json(self, status: int, payload: dict[str, Any]) -> None:
-            body = json.dumps(payload, separators=(",", ":")).encode()
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def do_GET(self) -> None:  # noqa: N802
-            if self.path not in {"/api/v1/state", "/api/v1/health"}:
-                self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
-                return
-            self._json(HTTPStatus.OK, recorder.snapshot())
+    class Handler(handler_for_snapshot(recorder.snapshot)):
 
         def do_POST(self) -> None:  # noqa: N802
             try:
@@ -325,9 +313,6 @@ def handler_for(recorder: Recorder):
                 self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
                 return
             self._json(HTTPStatus.ACCEPTED, recorder.snapshot())
-
-        def log_message(self, _format: str, *_args: object) -> None:
-            return
 
     return Handler
 

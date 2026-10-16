@@ -13,6 +13,17 @@ media pipeline and calls the common runtime at explicit lifecycle boundaries.
 This keeps restart decisions observable and testable instead of hiding them in
 an unbounded supervisor loop.
 
-**Maturity:** prototype. The API is covered by offline tests and is ready for
-the first output-adapter integration; it is not yet a separately versioned
+`health.py` gives adapters one loopback-friendly HTTP contract:
+
+- `GET /api/v1/state` returns the complete public snapshot;
+- `GET /api/v1/health/live` confirms the control process can answer;
+- `GET /api/v1/health/ready` returns 200 only when media is ready, otherwise
+  503; and
+- `GET /api/v1/health` is the readiness-compatible shorthand.
+
+Keeping liveness and readiness separate prevents a running-but-unusable media
+adapter from appearing healthy on an EIC dashboard.
+
+**Maturity:** prototype. The API is covered by offline tests and the file
+recorder is the first integrated adapter; it is not yet a separately versioned
 package.
