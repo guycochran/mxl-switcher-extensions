@@ -27,6 +27,9 @@ OWNED_SUFFIXES = (
     "core", "mediamtx", "program-confidence", "preview-confidence",
     "multiview-confidence", "skin", "youtube",
 )
+# Every container this launcher creates carries this label. Names alone are not
+# proof of ownership: an unrelated service may already use the same prefix.
+OWNER_LABEL = "io.github.guycochran.mxl-online-demo.deployment"
 
 
 def read_json(path: pathlib.Path) -> dict:
@@ -110,6 +113,15 @@ def docker(cfg: dict, *args: str) -> list[str]:
 
 def container_name(cfg: dict, suffix: str) -> str:
     return f"{cfg['deployment_id']}-{suffix}"
+
+
+def container_owner(cfg: dict, name: str) -> str | None:
+    """Return the owning deployment label of an existing container, or None if absent."""
+    proc = subprocess.run(
+        docker(cfg, "inspect", "-f", f'{{{{index .Config.Labels "{OWNER_LABEL}"}}}}', name),
+        text=True, capture_output=True,
+    )
+    return proc.stdout.strip() if proc.returncode == 0 else None
 
 
 def discover(cfg: dict, active_seconds: float = 30.0) -> list[dict]:
@@ -370,7 +382,10 @@ def commands(cfg: dict, resolved: dict) -> list[list[str]]:
     state = pathlib.Path(cfg["state_dir"])
     mount = f"{cfg['domain_mount_source']}:/mxl-domain"
     names = {suffix: container_name(cfg, suffix) for suffix in OWNED_SUFFIXES}
-    common = ["--restart=unless-stopped"]
+    # No restart policy: after a reboot or VM power-up the demo must stay down
+    # until an operator relaunches it against freshly discovered flows, rather
+    # than restart-looping on flow IDs from a previous meeting.
+    common = ["--restart=no", "--label", f"{OWNER_LABEL}={cfg['deployment_id']}"]
     result = [
         docker(cfg, "run", "-d", "--name", names["core"], *common, "--network", "host",
                "--health-cmd", "python3 -c \"import urllib.request; "
@@ -476,11 +491,17 @@ def stop(cfg: dict, apply: bool) -> None:
     if not apply:
         raise RuntimeError("stop removes the demo containers and requires --apply")
     existing = []
+    foreign = []
     for suffix in OWNED_SUFFIXES:
         name = container_name(cfg, suffix)
-        if subprocess.run(docker(cfg, "inspect", name), stdout=subprocess.DEVNULL,
-                          stderr=subprocess.DEVNULL).returncode == 0:
-            existing.append(name)
+        owner = container_owner(cfg, name)
+        if owner is None:
+            continue
+        (existing if owner == cfg["deployment_id"] else foreign).append(name)
+    if foreign:
+        raise RuntimeError(
+            "refusing to remove containers this launcher did not create: " + ", ".join(foreign)
+        )
     if existing:
         run(docker(cfg, "rm", "-f", *existing))
     print("Stopped only: " + (", ".join(existing) if existing else "no owned containers found"))

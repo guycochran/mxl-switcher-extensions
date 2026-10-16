@@ -5,6 +5,7 @@ import pathlib
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "deploy" / "online-demo" / "mxl_demo.py"
@@ -128,6 +129,50 @@ class OnlineDemoTests(unittest.TestCase):
         self.assertEqual(rendered.count("--preferred-flow"), 4)
         self.assertNotIn("stream-key", rendered)
         self.assertNotIn("supersource-helper", rendered)
+
+    def test_containers_are_labelled_and_never_auto_restart(self):
+        cfg = demo.load_config(self.config_file)
+        commands = demo.commands(cfg, demo.prepare(cfg))
+        for command in commands:
+            self.assertIn("--restart=no", command)
+            label = command.index("--label") + 1
+            self.assertEqual(command[label], f"{demo.OWNER_LABEL}=test-demo")
+        self.assertNotIn("unless-stopped", "\n".join(demo.quote(c) for c in commands))
+
+    def fake_docker(self, owners):
+        """Simulate `docker inspect` label lookups and record every other call."""
+        calls = []
+
+        def run(command, *args, **kwargs):
+            if command[1] == "inspect":
+                name = command[-1]
+                if name not in owners:
+                    return demo.subprocess.CompletedProcess(command, 1, "", "")
+                return demo.subprocess.CompletedProcess(command, 0, owners[name] + "\n", "")
+            calls.append(command)
+            return demo.subprocess.CompletedProcess(command, 0, "", "")
+
+        return run, calls
+
+    def test_stop_refuses_a_same_named_container_it_did_not_create(self):
+        cfg = demo.load_config(self.config_file)
+        run, calls = self.fake_docker({
+            "test-demo-core": "test-demo",
+            "test-demo-mediamtx": "<no value>",
+        })
+        with mock.patch.object(demo.subprocess, "run", side_effect=run):
+            with self.assertRaisesRegex(RuntimeError, "test-demo-mediamtx"):
+                demo.stop(cfg, apply=True)
+        self.assertEqual(calls, [])
+
+    def test_stop_removes_only_labelled_containers(self):
+        cfg = demo.load_config(self.config_file)
+        run, calls = self.fake_docker({
+            "test-demo-core": "test-demo", "test-demo-youtube": "test-demo",
+        })
+        with mock.patch.object(demo.subprocess, "run", side_effect=run):
+            demo.stop(cfg, apply=True)
+        self.assertEqual(calls, [["docker", "rm", "-f", "test-demo-core", "test-demo-youtube"]])
 
     def test_invalid_ports_and_names_fail_closed(self):
         value = dict(self.config)

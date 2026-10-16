@@ -18,7 +18,10 @@ All created containers use the configured `deployment_id` prefix:
 | `-skin` | Loopback ATEM-style browser control and EIC health |
 | `-youtube` | Loopback 4K YouTube controller and CPU encoder |
 
-ZoomISO and EasyMXL remain external. The stop command cannot remove them.
+ZoomISO and EasyMXL remain external. The stop command cannot remove them: it
+removes only containers carrying this deployment's owner label and refuses any
+same-named container without it. Demo containers use `--restart=no`, so a host
+reboot or VM power-up never revives them against a previous meeting's flows.
 
 ## Safety model
 
