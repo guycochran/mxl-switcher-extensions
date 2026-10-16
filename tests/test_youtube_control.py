@@ -42,6 +42,51 @@ class YouTubeControlTests(unittest.TestCase):
             found = control.discover_zoomiso_video(pathlib.Path(directory), active_seconds=5)
             self.assertEqual([item.flow_id for item in found], ["flow-1a", "flow-2"])
 
+    def make_audio_flow(self, root, flow_id, media_type="audio/float32", age=0):
+        directory = pathlib.Path(root) / f"{flow_id}.mxl-flow"
+        directory.mkdir()
+        (directory / "flow_def.json").write_text(json.dumps({
+            "id": flow_id, "label": "Program Audio", "media_type": media_type,
+        }), encoding="utf-8")
+        data = directory / "data"
+        data.write_bytes(b"")
+        when = time.time() - age
+        os.utime(data, (when, when))
+
+    def controller(self, root, audio_flow):
+        args = control.parser().parse_args([
+            "--domain", str(root), "--audio-flow", audio_flow,
+            "--source-count", "4", "--active-seconds", "5",
+        ])
+        for output in range(1, 5):
+            self.make_flow(root, f"video-{output}", output)
+        return control.Controller(args)
+
+    def test_audio_ready_requires_live_program_audio_flow(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.make_audio_flow(directory, "audio-live")
+            self.make_audio_flow(directory, "audio-stale", age=20)
+            self.make_audio_flow(directory, "not-audio", media_type="video/v210")
+            root = pathlib.Path(directory)
+            self.assertTrue(control.audio_flow_active(root, "audio-live", 5))
+            self.assertFalse(control.audio_flow_active(root, "audio-stale", 5))
+            self.assertFalse(control.audio_flow_active(root, "not-audio", 5))
+            self.assertFalse(control.audio_flow_active(root, "missing", 5))
+            self.assertFalse(control.audio_flow_active(root, "../audio-live", 5))
+
+    def test_start_refuses_missing_program_audio_before_opening_mxl(self):
+        with tempfile.TemporaryDirectory() as directory:
+            controller = self.controller(directory, "audio-missing")
+            snapshot = controller.snapshot()
+            self.assertEqual(snapshot["source_count"], 4)
+            self.assertFalse(snapshot["audio_ready"])
+            with self.assertRaisesRegex(ValueError, "Program audio"):
+                controller.configure_and_start(
+                    "rtmps://a.rtmps.youtube.com/live2", "abc-def"
+                )
+            self.assertIsNone(controller.worker)
+            self.assertFalse(controller.configured)
+
     def test_page_has_masked_key_and_never_embeds_a_key_value(self):
         body = control.page("csrf-value", 4).decode("utf-8")
         self.assertIn('type="password"', body)

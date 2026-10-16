@@ -22,6 +22,8 @@ from youtube_8up_canvas import Input, parse_input, tile_layout, write_label_png
 
 
 QUEUE_NS = 2_000_000_000
+# AAC-LC emits one encoded buffer per 1024 PCM samples per channel.
+AAC_FRAME_SAMPLES = 1024
 
 
 def current_rss_mib() -> float:
@@ -464,11 +466,16 @@ class Output:
             expected_fps = rate_as_float(self.args.rate)
             minimum_video_fps = expected_fps * 0.90
             minimum_source_fps = expected_fps * 0.80
+            minimum_audio_buffers_per_second = (
+                self.args.audio_rate_hz / AAC_FRAME_SAMPLES * 0.90
+            )
             minimum_mux_kbps = self.args.video_bitrate_kbps * 0.70
             checks = {
                 "pipeline_streaming": self.state == "streaming",
                 "encoded_video_cadence": self.rates["video_fps"] >= minimum_video_fps,
-                "audio_advancing": self.rates["audio_buffers_per_second"] >= 20.0,
+                "audio_advancing": (
+                    self.rates["audio_buffers_per_second"] >= minimum_audio_buffers_per_second
+                ),
                 "mux_fresh": mux_age is not None and mux_age < 5.0,
                 "mux_bitrate": self.rates["mux_kbps"] >= minimum_mux_kbps,
                 "destination_fresh": sent_age is not None and sent_age < 5.0,
@@ -510,6 +517,9 @@ class Output:
                     },
                     "minimum_video_fps": round(minimum_video_fps, 3),
                     "minimum_source_fps": round(minimum_source_fps, 3),
+                    "minimum_audio_buffers_per_second": round(
+                        minimum_audio_buffers_per_second, 3
+                    ),
                     "minimum_mux_kbps": round(minimum_mux_kbps, 3),
                     "process_cpu_cores": round(self.process_cpu_cores, 3),
                     "process_rss_mib": round(current_rss_mib(), 3),

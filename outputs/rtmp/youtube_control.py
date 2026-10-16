@@ -57,6 +57,22 @@ def discover_zoomiso_video(
     return [unique[number] for number in sorted(unique)]
 
 
+def audio_flow_active(
+    domain: pathlib.Path, flow_id: str | None, active_seconds: float = 30.0
+) -> bool:
+    """Return whether the configured Program audio flow exists and is being written."""
+    if not flow_id or "/" in flow_id or flow_id.startswith("."):
+        return False
+    directory = domain / f"{flow_id}.mxl-flow"
+    try:
+        value = json.loads((directory / "flow_def.json").read_text(encoding="utf-8"))
+        if str(value.get("id")) != flow_id or value.get("media_type") != "audio/float32":
+            return False
+        return time.time() - (directory / "data").stat().st_mtime <= active_seconds
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return False
+
+
 class Controller:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
@@ -75,8 +91,14 @@ class Controller:
             set(self.args.preferred_flow or ()),
         )
 
+    def audio_ready(self) -> bool:
+        return audio_flow_active(
+            pathlib.Path(self.args.domain), self.args.audio_flow, self.args.active_seconds
+        )
+
     def snapshot(self) -> dict[str, Any]:
         sources = self.sources()
+        audio_ready = self.audio_ready()
         encoder_label = (
             f"H.264 High / x264 CPU / {self.args.video_bitrate_kbps:,} Kbps CBR"
             if self.args.video_encoder == "x264enc"
@@ -89,11 +111,14 @@ class Controller:
                 "service": f"YouTube 4K {self.args.source_count}-up",
                 "configured": self.configured,
                 "running": running,
-                "ready_to_start": len(sources) >= self.args.source_count and self.configured and not running,
+                "ready_to_start": (
+                    len(sources) >= self.args.source_count
+                    and audio_ready and self.configured and not running
+                ),
                 "source_count": len(sources),
                 "sources": [source.label for source in sources[:self.args.source_count]],
                 "required_source_count": self.args.source_count,
-                "audio_ready": bool(self.args.audio_flow),
+                "audio_ready": audio_ready,
                 "server_url": self.server_url,
                 "profile": {
                     "canvas": "3840x2160p30",
@@ -113,6 +138,8 @@ class Controller:
             raise ValueError(
                 f"{self.args.source_count} live ZoomISO video outputs are required; found {len(sources)}"
             )
+        if not self.audio_ready():
+            raise ValueError("the configured Program audio flow is missing, not audio, or not advancing")
         with self.lock:
             if self.worker is not None and self.worker.is_alive():
                 raise ValueError("output is already running")
@@ -173,7 +200,7 @@ label{{display:block;color:var(--muted);font-size:12px;font-weight:700;margin:13
 const csrf=document.querySelector('meta[name=csrf-token]').content,msg=document.getElementById('message');
 async function api(path,body){{const r=await fetch(path,{{method:body?'POST':'GET',headers:body?{{'content-type':'application/json','x-csrf-token':csrf}}:{{}},body:body?JSON.stringify(body):undefined,cache:'no-store'}});const j=await r.json();if(!r.ok)throw Error(j.error||'Request failed');return j}}
 const prettyCheck=n=>n.replaceAll('_',' ');
-async function refresh(){{try{{const s=await api('/api/state'),required=s.required_source_count,o=s.output,m=o?.metrics||{{}},failed=o?.failed_checks||[];document.getElementById('count').textContent=`${{Math.min(s.source_count,required)}}/${{required}}`;document.getElementById('url').value=s.server_url;const dot=document.getElementById('dot'),state=document.getElementById('state'),detail=document.getElementById('detail');dot.className='dot'+(o?.ready?' live':s.running?' bad':s.source_count>=required?'':' bad');state.textContent=o?.ready?'LIVE — all demo gates passing':s.running?'NOT READY — '+(failed.map(prettyCheck).join(', ')||'warming up'):s.source_count>=required?'Ready for destination':`Waiting for ${{required}} live ZoomISO outputs`;detail.textContent=s.last_action;document.getElementById('video-fps').textContent=m.video_fps?.toFixed(1)??'—';document.getElementById('sent-rate').textContent=m.sent_kbps!==undefined?(m.sent_kbps/1000).toFixed(1):'—';document.getElementById('clock-fps').textContent=m.timecode_fps?.toFixed(1)??(required===8?'—':'n/a');document.getElementById('cpu-cores').textContent=m.process_cpu_cores?.toFixed(1)??'—';document.getElementById('rss-mib').textContent=m.process_rss_mib?.toFixed(0)??'—';document.getElementById('reconnects').textContent=o?.reconnects??0;document.getElementById('start').disabled=s.running||s.source_count<required;const rates=Object.values(m.source_fps||{{}}),box=document.getElementById('sources');box.innerHTML='';for(let i=0;i<required;i++){{const d=document.createElement('div'),fps=rates[i];d.className='source'+(i<s.sources.length?(fps!==undefined&&fps<m.minimum_source_fps?' bad':' ok'):'');d.textContent=(s.sources[i]||`INPUT ${{i+1}} — waiting`)+(fps!==undefined?` · ${{fps.toFixed(1)}} fps`:'');box.appendChild(d)}}}}catch(e){{msg.textContent=e.message}}}}
+async function refresh(){{try{{const s=await api('/api/state'),required=s.required_source_count,o=s.output,m=o?.metrics||{{}},failed=o?.failed_checks||[];document.getElementById('count').textContent=`${{Math.min(s.source_count,required)}}/${{required}}`;document.getElementById('url').value=s.server_url;const dot=document.getElementById('dot'),state=document.getElementById('state'),detail=document.getElementById('detail');dot.className='dot'+(o?.ready?' live':s.running?' bad':s.source_count>=required&&s.audio_ready?'':' bad');state.textContent=o?.ready?'LIVE — all demo gates passing':s.running?'NOT READY — '+(failed.map(prettyCheck).join(', ')||'warming up'):s.source_count<required?`Waiting for ${{required}} live ZoomISO outputs`:!s.audio_ready?'Waiting for live Program audio':'Ready for destination';detail.textContent=s.last_action;document.getElementById('video-fps').textContent=m.video_fps?.toFixed(1)??'—';document.getElementById('sent-rate').textContent=m.sent_kbps!==undefined?(m.sent_kbps/1000).toFixed(1):'—';document.getElementById('clock-fps').textContent=m.timecode_fps?.toFixed(1)??(required===8?'—':'n/a');document.getElementById('cpu-cores').textContent=m.process_cpu_cores?.toFixed(1)??'—';document.getElementById('rss-mib').textContent=m.process_rss_mib?.toFixed(0)??'—';document.getElementById('reconnects').textContent=o?.reconnects??0;document.getElementById('start').disabled=s.running||s.source_count<required||!s.audio_ready;const rates=Object.values(m.source_fps||{{}}),box=document.getElementById('sources');box.innerHTML='';for(let i=0;i<required;i++){{const d=document.createElement('div'),fps=rates[i];d.className='source'+(i<s.sources.length?(fps!==undefined&&fps<m.minimum_source_fps?' bad':' ok'):'');d.textContent=(s.sources[i]||`INPUT ${{i+1}} — waiting`)+(fps!==undefined?` · ${{fps.toFixed(1)}} fps`:'');box.appendChild(d)}}}}catch(e){{msg.textContent=e.message}}}}
 document.getElementById('launch').onsubmit=async e=>{{e.preventDefault();msg.textContent='Starting…';try{{await api('/api/start',{{server_url:document.getElementById('url').value,stream_key:document.getElementById('key').value}});document.getElementById('key').value='';msg.textContent='Start requested. YouTube Studio should receive the signal shortly.';refresh()}}catch(e){{msg.textContent=e.message}}}};
 document.getElementById('stop').onclick=async()=>{{try{{await api('/api/stop',{{forget:false}});msg.textContent='Stop requested.';refresh()}}catch(e){{msg.textContent=e.message}}}};
 document.getElementById('forget').onclick=async()=>{{try{{await api('/api/stop',{{forget:true}});document.getElementById('key').value='';msg.textContent='Stopped. The in-memory key was forgotten.';refresh()}}catch(e){{msg.textContent=e.message}}}};
