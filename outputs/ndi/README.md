@@ -40,8 +40,8 @@ python3 outputs/ndi/ndi_output.py \
 
 The verification name is the full source name shown to an NDI receiver, not
 only the value passed to `--ndi-name`. Readiness remains red unless the
-receiver observes both essences and measures video within 10% of 30 fps plus
-audio within 5% of 48 kHz. Presence alone is deliberately insufficient. The
+receiver observes both essences and measures video and audio within 2% of
+30 fps and 48 kHz respectively. Presence alone is deliberately insufficient. The
 probe is also available by itself:
 
 ```sh

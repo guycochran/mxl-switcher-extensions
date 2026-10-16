@@ -37,7 +37,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertFalse(result["audio_rate_ok"])
 
     def test_out_of_range_video_fails(self):
-        result = probe.evaluate(self.result(video_buffers=351))
+        result = probe.evaluate(self.result(video_buffers=310))
         self.assertFalse(result["passed"])
         self.assertFalse(result["video_rate_ok"])
 

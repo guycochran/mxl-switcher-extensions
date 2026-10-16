@@ -26,8 +26,8 @@ def evaluate(result: dict, expected_video_fps: float = 30.0, expected_audio_rate
     result["audio_sample_rate_from_pts"] = (
         result["audio_sample_frames"] * 1_000_000_000 / audio_span if audio_span > 0 else 0.0
     )
-    result["video_rate_ok"] = expected_video_fps * 0.9 <= result["video_fps_from_pts"] <= expected_video_fps * 1.1
-    result["audio_rate_ok"] = expected_audio_rate * 0.95 <= result["audio_sample_rate_from_pts"] <= expected_audio_rate * 1.05
+    result["video_rate_ok"] = expected_video_fps * 0.98 <= result["video_fps_from_pts"] <= expected_video_fps * 1.02
+    result["audio_rate_ok"] = expected_audio_rate * 0.98 <= result["audio_sample_rate_from_pts"] <= expected_audio_rate * 1.02
     result["passed"] = (
         result["error"] is None
         and result["video_buffers"] > 1
