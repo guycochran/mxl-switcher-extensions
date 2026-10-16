@@ -79,7 +79,48 @@ When containerized, bind the process to `0.0.0.0` with the explicit
 the LAN or Internet.
 
 Health is loopback-only on port 18120. A green readiness response requires
-advancing encoded video, advancing encoded audio, and fresh mux output.
+all selected source branches to advance, encoded video near the requested
+cadence, advancing encoded audio, fresh mux output at no less than 70% of the
+requested video bitrate, and (for eight-up) the diagnostic clock to advance at
+the encoded cadence. A reconnect remains visible in telemetry even after the
+pipeline recovers.
+
+Before treating the controller as screenshot-ready, run the read-only sustained
+gate through the same SSH tunnel:
+
+```bash
+python3 scripts/check_youtube_demo.py \
+  --url http://127.0.0.1:18121 \
+  --required-sources 8 \
+  --seconds 30
+```
+
+The command exits nonzero if any source freezes, encoded cadence falls below
+90% of target, mux bitrate falls below 70% of target, the timecode freezes,
+audio stalls, mux output goes stale, or a reconnect occurs. It never reads or
+prints the stream key.
+
+### Audience proof capture
+
+Capture evidence only after the 30-second gate passes and YouTube Studio says
+`Excellent`:
+
+1. Capture the loopback controller with `8/8`, green `LIVE`, about 29.97 encoded
+   fps, credible mux Mbps, about 29.97 clock fps, zero reconnects, and all eight
+   source rows showing advancing fps.
+2. Capture the YouTube audience player showing all eight intended test tiles
+   and the status tile. Do not include the stream key, meeting link, private
+   addresses, flow identifiers, or unrelated browser tabs.
+3. Ten seconds later, capture the audience player again. The changed timecode
+   is objective evidence that the delivered picture is moving rather than a
+   single frozen frame.
+4. Capture a contemporaneous resource sample for ZoomISO and the output
+   controller. Record CPU/RSS as a range across the gate, not a single idle or
+   post-stream sample.
+
+One audience screenshot proves composition, not motion or stability. The paired
+timecode captures plus the sustained machine-readable gate are the minimum
+end-to-end proof for the next public update.
 
 `Dockerfile.nvidia` layers the userspace CUDA/NVENC libraries that match the
 Ubuntu 24.04 NVIDIA 580 guest driver onto the existing MXL media image. Run the

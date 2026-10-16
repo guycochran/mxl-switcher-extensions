@@ -50,9 +50,13 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertNotIn("stream-key-file", body)
 
     def test_cpu_page_identifies_cpu_encoder(self):
-        body = control.page("csrf-value", 4, "x264enc").decode("utf-8")
+        body = control.page("csrf-value", 4, "x264enc", 20000).decode("utf-8")
         self.assertIn("x264 CPU H.264 High", body)
         self.assertNotIn("NVENC H.264 High", body)
+        self.assertIn("20M", body)
+        self.assertIn("encoded fps", body)
+        self.assertIn("mux Mbps", body)
+        self.assertIn("all demo gates passing", body)
 
     def test_discovery_can_pin_an_instance_by_flow_identity(self):
         with tempfile.TemporaryDirectory() as directory:

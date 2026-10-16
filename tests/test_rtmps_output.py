@@ -5,6 +5,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "outputs" / "rtmp" / "rtmps_output.py"
@@ -23,6 +24,8 @@ class RTMPSOutputTests(unittest.TestCase):
             rate="30/1", video_encoder="nvh264enc",
             video_bitrate_kbps=30000, audio_bitrate_bps=128000,
             audio_rate_hz=44100,
+            server_url="rtmps://a.rtmps.youtube.com/live2",
+            destination_label="YouTube Live",
         )
 
     def test_pipeline_is_4k_youtube_profile_and_contains_no_destination(self):
@@ -67,6 +70,7 @@ class RTMPSOutputTests(unittest.TestCase):
             args.brand_text = "MXL LIVE | 4K"
             description = rtmps.pipeline_description(args)
             self.assertEqual(description.count("video-flow-id="), 8)
+            self.assertEqual(description.count("identity name=source_"), 8)
             self.assertIn("compositor name=mix", description)
             self.assertIn("mix.sink_8", description)
             self.assertIn(
@@ -100,6 +104,53 @@ class RTMPSOutputTests(unittest.TestCase):
             self.assertIn("videotestsrc is-live=true pattern=black", description)
             self.assertIn("sink_4::width=3840 sink_4::height=2160", description)
             self.assertIn("sink_4::zorder=0", description)
+
+    def test_readiness_requires_every_source_clock_and_mux_to_advance(self):
+        args = self.args()
+        args.video_flow = None
+        args.input = [rtmps.Input(f"SOURCE {i + 1}", f"flow-{i + 1}") for i in range(8)]
+        with mock.patch.object(rtmps.time, "monotonic", return_value=100.0):
+            output = rtmps.Output(args, "abc-def")
+        output.state = "streaming"
+        output.last_mux_at = 101.9
+        output.counts.update(video=60, audio=100, mux_buffers=60, mux_bytes=7_500_000)
+        output.source_counts = {name: 60 for name in output.source_counts}
+        output.timecode_updates = 60
+        with mock.patch.object(rtmps.time, "monotonic", return_value=102.0):
+            snapshot = output.snapshot()
+        self.assertTrue(snapshot["ready"])
+        self.assertEqual(snapshot["failed_checks"], [])
+        self.assertAlmostEqual(snapshot["metrics"]["video_fps"], 30.0)
+        self.assertAlmostEqual(snapshot["metrics"]["mux_kbps"], 30000.0)
+        self.assertTrue(all(rate == 30.0 for rate in snapshot["metrics"]["source_fps"].values()))
+
+        output.source_counts["source_4"] = 60
+        output.counts.update(video=120, audio=200, mux_buffers=120, mux_bytes=15_000_000)
+        output.timecode_updates = 120
+        output.last_mux_at = 103.9
+        for name in output.source_counts:
+            if name != "source_4":
+                output.source_counts[name] = 120
+        with mock.patch.object(rtmps.time, "monotonic", return_value=104.0):
+            snapshot = output.snapshot()
+        self.assertFalse(snapshot["ready"])
+        self.assertIn("all_sources_advancing", snapshot["failed_checks"])
+
+    def test_readiness_rejects_low_bitrate_and_frozen_clock(self):
+        args = self.args()
+        args.video_flow = None
+        args.input = [rtmps.Input(f"SOURCE {i + 1}", f"flow-{i + 1}") for i in range(8)]
+        with mock.patch.object(rtmps.time, "monotonic", return_value=200.0):
+            output = rtmps.Output(args, "abc-def")
+        output.state = "streaming"
+        output.last_mux_at = 201.9
+        output.counts.update(video=60, audio=100, mux_buffers=60, mux_bytes=250_000)
+        output.source_counts = {name: 60 for name in output.source_counts}
+        with mock.patch.object(rtmps.time, "monotonic", return_value=202.0):
+            snapshot = output.snapshot()
+        self.assertFalse(snapshot["ready"])
+        self.assertIn("mux_bitrate", snapshot["failed_checks"])
+        self.assertIn("diagnostic_clock_advancing", snapshot["failed_checks"])
 
     def test_stream_key_requires_private_regular_file(self):
         with tempfile.TemporaryDirectory() as directory:

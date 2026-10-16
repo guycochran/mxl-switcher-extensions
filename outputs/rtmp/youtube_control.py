@@ -78,9 +78,9 @@ class Controller:
     def snapshot(self) -> dict[str, Any]:
         sources = self.sources()
         encoder_label = (
-            "H.264 High / x264 CPU / 30,000 Kbps CBR"
+            f"H.264 High / x264 CPU / {self.args.video_bitrate_kbps:,} Kbps CBR"
             if self.args.video_encoder == "x264enc"
-            else "H.264 High / NVENC / 30,000 Kbps CBR"
+            else f"H.264 High / NVENC / {self.args.video_bitrate_kbps:,} Kbps CBR"
         )
         with self.lock:
             output = None if self.output is None else self.output.snapshot()
@@ -139,7 +139,12 @@ class Controller:
                 self.last_action = "Stream stopped and key forgotten"
 
 
-def page(csrf: str, source_count: int, video_encoder: str = "nvh264enc") -> bytes:
+def page(
+    csrf: str,
+    source_count: int,
+    video_encoder: str = "nvh264enc",
+    video_bitrate_kbps: int = 30000,
+) -> bytes:
     escaped = html.escape(csrf, quote=True)
     encoder_label = "x264 CPU H.264 High" if video_encoder == "x264enc" else "NVENC H.264 High"
     return f"""<!doctype html>
@@ -154,19 +159,20 @@ def page(csrf: str, source_count: int, video_encoder: str = "nvh264enc") -> byte
 label{{display:block;color:var(--muted);font-size:12px;font-weight:700;margin:13px 0 6px}} input{{width:100%;padding:13px 14px;border-radius:9px;border:1px solid var(--line);background:#071018;color:var(--text);font:inherit;outline:none}} input:focus{{border-color:var(--cyan);box-shadow:0 0 0 3px #26d9e922}}
 .buttons{{display:flex;gap:10px;margin-top:18px}} button{{border:0;border-radius:9px;padding:12px 17px;font-weight:800;cursor:pointer}} .go{{background:var(--cyan);color:#031116;flex:1}} .stop{{background:#5a2430;color:#fff}} .forget{{background:#263744;color:#fff}}
 .status{{padding:13px;border-radius:10px;background:#09141d;border:1px solid var(--line);margin-bottom:15px}} .dot{{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--amber);margin-right:8px}} .dot.live{{background:var(--green);box-shadow:0 0 12px var(--green)}} .dot.bad{{background:var(--red)}}
-.sources{{display:grid;grid-template-columns:1fr 1fr;gap:8px}} .source{{border:1px solid var(--line);background:#09141d;border-radius:8px;padding:10px;color:var(--muted)}} .source.ok{{color:var(--text);border-color:#245d48}} .spec{{display:grid;gap:11px}} .spec div{{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:9px}} .spec span{{color:var(--muted)}} .note{{font-size:12px;color:var(--muted);margin-top:14px}} #message{{min-height:22px;color:var(--amber);margin-top:12px}}
+.sources{{display:grid;grid-template-columns:1fr 1fr;gap:8px}} .source{{border:1px solid var(--line);background:#09141d;border-radius:8px;padding:10px;color:var(--muted)}} .source.ok{{color:var(--text);border-color:#245d48}} .source.bad{{color:#ffd1d7;border-color:#7b3040}} .spec{{display:grid;gap:11px}} .spec div{{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:9px}} .spec span{{color:var(--muted)}} .note{{font-size:12px;color:var(--muted);margin-top:14px}} #message{{min-height:22px;color:var(--amber);margin-top:12px}} .telemetry{{margin-top:12px;display:grid;grid-template-columns:repeat(4,1fr);gap:7px}} .telemetry div{{background:#061018;border:1px solid var(--line);border-radius:7px;padding:7px;font-size:12px;color:var(--muted)}} .telemetry b{{display:block;color:var(--text);font-size:16px}}
 @media(max-width:800px){{.grid{{grid-template-columns:1fr}}.meter{{grid-template-columns:1fr 1fr}}.shell{{padding:20px}}}}
 </style></head><body><main class="shell"><header><div><div class="eyebrow">MXL SWITCHER CORE</div><h1>YouTube 4K Control</h1></div><div class="tag">{source_count}-up · 2160p30 · secure RTMPS</div></header>
-<div class="grid"><section class="card"><h2>Destination & launch</h2><div class="status"><span id="dot" class="dot"></span><b id="state">Checking system…</b><div id="detail" class="tag"></div></div>
+<div class="grid"><section class="card"><h2>Destination & launch</h2><div class="status"><span id="dot" class="dot"></span><b id="state">Checking system…</b><div id="detail" class="tag"></div><div class="telemetry"><div><b id="video-fps">—</b>encoded fps</div><div><b id="mux-rate">—</b>mux Mbps</div><div><b id="clock-fps">—</b>clock fps</div><div><b id="reconnects">0</b>reconnects</div></div></div>
 <form id="launch"><label for="url">YouTube RTMPS server URL</label><input id="url" autocomplete="off" spellcheck="false" value="rtmps://a.rtmps.youtube.com/live2">
 <label for="key">Stream key</label><input id="key" type="password" autocomplete="off" placeholder="Paste key — it is kept only in memory" required>
 <div class="buttons"><button class="go" id="start" type="submit">Start stream</button><button class="stop" id="stop" type="button">Stop</button><button class="forget" id="forget" type="button">Stop + forget key</button></div></form><div id="message"></div>
 <p class="note">Set the broadcast to <b>Unlisted</b> in YouTube Studio before starting. This page is reachable only through the local SSH tunnel. The key is never returned by the API, printed, logged, placed in a command, or saved to disk.</p></section>
-<aside class="card"><h2>Transmission profile</h2><div class="meter"><div class="tile"><b id="count">0/{source_count}</b><span>live sources</span></div><div class="tile"><b>4K</b><span>3840×2160</span></div><div class="tile"><b>30</b><span>frames/sec</span></div><div class="tile"><b>30M</b><span>video bitrate</span></div></div><div id="sources" class="sources"></div><h2 style="margin-top:22px">Signal chain</h2><div class="spec"><div><span>Video</span><b>{encoder_label}</b></div><div><span>Audio</span><b>AAC stereo · 128K</b></div><div><span>GOP</span><b>2 seconds</b></div><div><span>Transport</span><b>RTMPS</b></div></div></aside></div></main>
+<aside class="card"><h2>Transmission profile</h2><div class="meter"><div class="tile"><b id="count">0/{source_count}</b><span>live sources</span></div><div class="tile"><b>4K</b><span>3840×2160</span></div><div class="tile"><b>30</b><span>frames/sec</span></div><div class="tile"><b>{video_bitrate_kbps / 1000:g}M</b><span>video bitrate</span></div></div><div id="sources" class="sources"></div><h2 style="margin-top:22px">Signal chain</h2><div class="spec"><div><span>Video</span><b>{encoder_label}</b></div><div><span>Audio</span><b>AAC stereo · 128K</b></div><div><span>GOP</span><b>2 seconds</b></div><div><span>Transport</span><b>RTMPS</b></div></div></aside></div></main>
 <script>
 const csrf=document.querySelector('meta[name=csrf-token]').content,msg=document.getElementById('message');
 async function api(path,body){{const r=await fetch(path,{{method:body?'POST':'GET',headers:body?{{'content-type':'application/json','x-csrf-token':csrf}}:{{}},body:body?JSON.stringify(body):undefined,cache:'no-store'}});const j=await r.json();if(!r.ok)throw Error(j.error||'Request failed');return j}}
-async function refresh(){{try{{const s=await api('/api/state'),required=s.required_source_count;document.getElementById('count').textContent=`${{Math.min(s.source_count,required)}}/${{required}}`;document.getElementById('url').value=s.server_url;const dot=document.getElementById('dot'),state=document.getElementById('state'),detail=document.getElementById('detail');dot.className='dot'+(s.output?.ready?' live':s.running?'':' bad');state.textContent=s.output?.ready?'LIVE — video and audio advancing':s.running?'Connecting to YouTube':s.source_count>=required?'Ready for destination':`Waiting for ${{required}} live ZoomISO outputs`;detail.textContent=s.last_action;document.getElementById('start').disabled=s.running||s.source_count<required;const box=document.getElementById('sources');box.innerHTML='';for(let i=0;i<required;i++){{const d=document.createElement('div');d.className='source'+(i<s.sources.length?' ok':'');d.textContent=s.sources[i]||`INPUT ${{i+1}} — waiting`;box.appendChild(d)}}}}catch(e){{msg.textContent=e.message}}}}
+const prettyCheck=n=>n.replaceAll('_',' ');
+async function refresh(){{try{{const s=await api('/api/state'),required=s.required_source_count,o=s.output,m=o?.metrics||{{}},failed=o?.failed_checks||[];document.getElementById('count').textContent=`${{Math.min(s.source_count,required)}}/${{required}}`;document.getElementById('url').value=s.server_url;const dot=document.getElementById('dot'),state=document.getElementById('state'),detail=document.getElementById('detail');dot.className='dot'+(o?.ready?' live':s.running?' bad':s.source_count>=required?'':' bad');state.textContent=o?.ready?'LIVE — all demo gates passing':s.running?'NOT READY — '+(failed.map(prettyCheck).join(', ')||'warming up'):s.source_count>=required?'Ready for destination':`Waiting for ${{required}} live ZoomISO outputs`;detail.textContent=s.last_action;document.getElementById('video-fps').textContent=m.video_fps?.toFixed(1)??'—';document.getElementById('mux-rate').textContent=m.mux_kbps!==undefined?(m.mux_kbps/1000).toFixed(1):'—';document.getElementById('clock-fps').textContent=m.timecode_fps?.toFixed(1)??(required===8?'—':'n/a');document.getElementById('reconnects').textContent=o?.reconnects??0;document.getElementById('start').disabled=s.running||s.source_count<required;const rates=Object.values(m.source_fps||{{}}),box=document.getElementById('sources');box.innerHTML='';for(let i=0;i<required;i++){{const d=document.createElement('div'),fps=rates[i];d.className='source'+(i<s.sources.length?(fps!==undefined&&fps<m.minimum_source_fps?' bad':' ok'):'');d.textContent=(s.sources[i]||`INPUT ${{i+1}} — waiting`)+(fps!==undefined?` · ${{fps.toFixed(1)}} fps`:'');box.appendChild(d)}}}}catch(e){{msg.textContent=e.message}}}}
 document.getElementById('launch').onsubmit=async e=>{{e.preventDefault();msg.textContent='Starting…';try{{await api('/api/start',{{server_url:document.getElementById('url').value,stream_key:document.getElementById('key').value}});document.getElementById('key').value='';msg.textContent='Start requested. YouTube Studio should receive the signal shortly.';refresh()}}catch(e){{msg.textContent=e.message}}}};
 document.getElementById('stop').onclick=async()=>{{try{{await api('/api/stop',{{forget:false}});msg.textContent='Stop requested.';refresh()}}catch(e){{msg.textContent=e.message}}}};
 document.getElementById('forget').onclick=async()=>{{try{{await api('/api/stop',{{forget:true}});document.getElementById('key').value='';msg.textContent='Stopped. The in-memory key was forgotten.';refresh()}}catch(e){{msg.textContent=e.message}}}};
@@ -192,6 +198,7 @@ def handler_for(controller: Controller):
                     controller.csrf,
                     controller.args.source_count,
                     controller.args.video_encoder,
+                    controller.args.video_bitrate_kbps,
                 )
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "text/html; charset=utf-8")

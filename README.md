@@ -92,6 +92,16 @@ preventing an incompatible, stalled, or presence-only path from appearing
 healthy. The package remains below candidate maturity until content-level A/V
 timing and flow-replacement recovery gates pass.
 
+The [YouTube RTMPS output](outputs/rtmp) is a working 4K prototype with direct
+four- or eight-source MXL composition, CPU and optional NVENC profiles, a
+loopback-only operator window, in-memory stream-key handling, Program audio,
+and bounded reconnect behavior. Its readiness signal now fails closed unless
+every selected source, encoded video, audio, mux bitrate, and the eight-up
+diagnostic clock are all advancing. A CPU-only cloud run proved the 4K
+H.264/AAC/RTMPS transport path, while the complete eight-participant audience
+gate remains open pending paired YouTube screenshots and a sustained green
+telemetry window. The package is deliberately still labeled `prototype`.
+
 The shared operational layer is implemented today: manifests declare common
 state/liveness/readiness paths, adapters can use the thread-safe lifecycle and
 bounded restart primitives in `common/`, and `scripts/check_health.py` provides

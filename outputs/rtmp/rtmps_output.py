@@ -168,6 +168,7 @@ def pipeline_description(args: argparse.Namespace) -> str:
                 f"! video/x-raw,width={tile_width},height={tile_height},framerate={args.rate}",
                 "! videoconvert n-threads=2",
                 f"! video/x-raw,format=BGRA,width={tile_width},height={tile_height},framerate={args.rate}",
+                f"! identity name=source_{index} silent=true",
                 "! queue max-size-buffers=2 leaky=downstream",
                 f"! mix.sink_{index}",
             ])
@@ -206,10 +207,16 @@ class Output:
         self.started_at = time.monotonic()
         self.last_mux_at = 0.0
         self.counts = {"video": 0, "audio": 0, "mux_buffers": 0, "mux_bytes": 0}
+        self.source_counts = {
+            f"source_{index}": 0 for index, _source in enumerate(getattr(args, "input", None) or [])
+        }
         self.rate_sample_at = self.started_at
         self.rate_sample_counts = {"video": 0, "audio": 0, "mux_bytes": 0}
+        self.source_rate_sample_counts = dict(self.source_counts)
         self.rates = {"video_fps": 0.0, "audio_buffers_per_second": 0.0, "mux_kbps": 0.0}
+        self.source_rates = {name: 0.0 for name in self.source_counts}
         self.timecode_updates = 0
+        self.timecode_rate_sample_count = 0
 
     def _draw_clock(
         self, _overlay: object, context: object, timestamp: int, _duration: int
@@ -282,6 +289,13 @@ class Output:
             pipeline.get_by_name(element_name).get_static_pad("src").add_probe(
                 self.Gst.PadProbeType.BUFFER, self._probe(metric)
             )
+        for source_name in self.source_counts:
+            source = pipeline.get_by_name(source_name)
+            if source is None:
+                raise RuntimeError(f"missing pipeline telemetry point {source_name}")
+            source.get_static_pad("src").add_probe(
+                self.Gst.PadProbeType.BUFFER, self._source_probe(source_name)
+            )
         if pipeline.set_state(self.Gst.State.PLAYING) == self.Gst.StateChangeReturn.FAILURE:
             pipeline.set_state(self.Gst.State.NULL)
             raise RuntimeError("pipeline failed to enter PLAYING")
@@ -295,6 +309,14 @@ class Output:
         if self.pipeline is not None:
             self.pipeline.set_state(self.Gst.State.NULL)
         self.pipeline = None
+
+    def _source_probe(self, name: str):
+        def count(_pad, _info):
+            with self.lock:
+                self.source_counts[name] += 1
+            return self.Gst.PadProbeReturn.OK
+
+        return count
 
     def run(self) -> int:
         import gi
@@ -359,17 +381,43 @@ class Output:
                     "audio": self.counts["audio"],
                     "mux_bytes": self.counts["mux_bytes"],
                 }
-            ready = (
-                self.state == "streaming"
-                and self.rates["video_fps"] >= 25.0
-                and self.rates["audio_buffers_per_second"] >= 20.0
-                and mux_age is not None
-                and mux_age < 5.0
-            )
+                self.source_rates = {
+                    name: (count - self.source_rate_sample_counts[name]) / elapsed
+                    for name, count in self.source_counts.items()
+                }
+                self.source_rate_sample_counts = dict(self.source_counts)
+                self.rates["timecode_fps"] = (
+                    self.timecode_updates - self.timecode_rate_sample_count
+                ) / elapsed
+                self.timecode_rate_sample_count = self.timecode_updates
+            expected_fps = rate_as_float(self.args.rate)
+            minimum_video_fps = expected_fps * 0.90
+            minimum_source_fps = expected_fps * 0.80
+            minimum_mux_kbps = self.args.video_bitrate_kbps * 0.70
+            checks = {
+                "pipeline_streaming": self.state == "streaming",
+                "encoded_video_cadence": self.rates["video_fps"] >= minimum_video_fps,
+                "audio_advancing": self.rates["audio_buffers_per_second"] >= 20.0,
+                "mux_fresh": mux_age is not None and mux_age < 5.0,
+                "mux_bitrate": self.rates["mux_kbps"] >= minimum_mux_kbps,
+                "all_sources_advancing": all(
+                    rate >= minimum_source_fps for rate in self.source_rates.values()
+                ),
+                "diagnostic_clock_advancing": (
+                    not self.source_counts
+                    or len(self.source_counts) != 8
+                    or self.rates.get("timecode_fps", 0.0) >= minimum_video_fps
+                ),
+                "no_active_error": self.last_error is None,
+            }
+            failed_checks = [name for name, passed in checks.items() if not passed]
+            ready = not failed_checks
             return {
                 "name": "program-rtmps-output", "kind": "output",
                 "destination": self.args.destination_label, "state": self.state,
                 "ready": ready, "revision": self.revision,
+                "health_checks": checks,
+                "failed_checks": failed_checks,
                 "reconnects": self.reconnects, "last_error": self.last_error,
                 "uptime_seconds": round(now - self.started_at, 3),
                 "metrics": {
@@ -381,6 +429,13 @@ class Output:
                     "resolution": "3840x2160", "frame_rate": self.args.rate,
                     "queue_bound_ns": QUEUE_NS,
                     "timecode_updates": self.timecode_updates,
+                    "source_frames": dict(self.source_counts),
+                    "source_fps": {
+                        name: round(value, 3) for name, value in self.source_rates.items()
+                    },
+                    "minimum_video_fps": round(minimum_video_fps, 3),
+                    "minimum_source_fps": round(minimum_source_fps, 3),
+                    "minimum_mux_kbps": round(minimum_mux_kbps, 3),
                     **{name: round(value, 3) for name, value in self.rates.items()},
                 },
             }
