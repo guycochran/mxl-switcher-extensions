@@ -11,6 +11,9 @@ RUN apt-get update \
 WORKDIR /app
 COPY common /app/common
 COPY outputs/rtmp /app/outputs/rtmp
-ENV PYTHONPATH=/app
+# The base image can contain a registry generated before GPU devices existed;
+# force one runtime scan so nvcodec is not retained as blacklisted.
+ENV PYTHONPATH=/app \
+    GST_REGISTRY=/tmp/gstreamer-runtime-registry.bin
 
 ENTRYPOINT ["python3", "/app/outputs/rtmp/youtube_control.py"]

@@ -33,6 +33,8 @@ class RTMPSOutputTests(unittest.TestCase):
         self.assertIn("rc-mode=cbr", description)
         self.assertIn("gop-size=60", description)
         self.assertIn("bframes=2", description)
+        self.assertIn("strict-gop=true", description)
+        self.assertIn("h264parse config-interval=-1", description)
         self.assertIn("avenc_aac bitrate=128000", description)
         self.assertIn("audio/x-raw,rate=44100,channels=2", description)
         self.assertIn("rtmpsink name=destination", description)

@@ -84,8 +84,8 @@ def pipeline_description(args: argparse.Namespace) -> str:
         ])
     parts.extend([
         f"! {args.video_encoder} name=video_encoder bitrate={args.video_bitrate_kbps}",
-        "rc-mode=cbr gop-size=60 bframes=2 aud=true cabac=true",
-        "strict-gop=true repeat-sequence-header=true vbv-buffer-size=60000",
+        "rc-mode=cbr gop-size=60 bframes=2 aud=true",
+        "strict-gop=true vbv-buffer-size=60000",
         "! video/x-h264,profile=high,stream-format=byte-stream,alignment=au",
         "! identity name=encoded_video silent=true ! h264parse config-interval=-1",
         "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 ! mux.video",
