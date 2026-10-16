@@ -24,6 +24,8 @@ def sample(ready=True, failed=None, source_fps=29.97, mux_kbps=30000, reconnects
                 "mux_kbps": mux_kbps,
                 "sent_kbps": mux_kbps,
                 "timecode_fps": 29.97,
+                "process_cpu_cores": 12.25,
+                "process_rss_mib": 768.0,
                 "source_fps": {f"source_{index}": source_fps for index in range(8)},
             },
         },
@@ -32,12 +34,16 @@ def sample(ready=True, failed=None, source_fps=29.97, mux_kbps=30000, reconnects
 
 class YouTubeDemoGateTests(unittest.TestCase):
     def test_accepts_sustained_healthy_samples(self):
-        result = gate.summarize([sample(), sample(), sample()], 8)
+        result = gate.summarize([sample(), sample(), sample()], 8, 30.125)
         self.assertTrue(result["passed"])
+        self.assertEqual(result["ready_samples"], 3)
+        self.assertEqual(result["elapsed_seconds"], 30.125)
         self.assertEqual(result["source_fps_min"], 29.97)
         self.assertEqual(result["composed_fps_min"], 29.97)
         self.assertEqual(result["mux_mbps_min"], 30.0)
         self.assertEqual(result["sent_mbps_min"], 30.0)
+        self.assertEqual(result["process_cpu_cores_max"], 12.25)
+        self.assertEqual(result["process_rss_mib_max"], 768.0)
 
     def test_rejects_single_frozen_source_or_low_mux(self):
         result = gate.summarize([

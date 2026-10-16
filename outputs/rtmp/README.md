@@ -27,8 +27,9 @@ A destination profile explicitly selects resolution, frame rate, H.264
 bitrate/profile, GOP duration, AAC bitrate/sample rate, reconnect policy, and
 the target service. The YouTube 4K prototype is 3840x2160p30, H.264 High at
 30,000 Kbps CBR, a two-second GOP, two B-frames, and stereo AAC at 128 Kbps /
-44.1 kHz. Service-specific requirements override only the adapter profile,
-never Program Master.
+48 kHz. Keeping the destination at Core's native Program rate avoids an
+unnecessary rate conversion at the final output boundary. Service-specific
+requirements override only the adapter profile, never Program Master.
 
 ## YouTube 4K proof
 
@@ -127,9 +128,10 @@ diagnosis harder.
 3. Ten seconds later, capture the audience player again. The changed timecode
    is objective evidence that the delivered picture is moving rather than a
    single frozen frame.
-4. Capture a contemporaneous resource sample for ZoomISO and the output
-   controller. Record CPU/RSS as a range across the gate, not a single idle or
-   post-stream sample.
+4. Save the gate JSON. It records the output process CPU-core and RSS ranges
+   across the same interval as the cadence and transport checks. Capture
+   ZoomISO and whole-host utilization separately so the report distinguishes
+   composition/encode cost from ingest and host headroom.
 
 One audience screenshot proves composition, not motion or stability. The paired
 timecode captures plus the sustained machine-readable gate are the minimum

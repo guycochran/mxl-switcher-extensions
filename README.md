@@ -54,6 +54,7 @@ Stopping, restarting, or failing one extension must not interrupt Core or
 another extension.
 
 See [extension contract](docs/EXTENSION_CONTRACT.md) and
+[broadcast-readiness plan](docs/BROADCAST_READINESS.md), plus
 [Core's output-node architecture](https://github.com/guycochran/mxl-switcher-core/blob/main/docs/OUTPUT_ARCHITECTURE.md).
 
 ## Current starting point

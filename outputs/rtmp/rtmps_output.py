@@ -8,6 +8,7 @@ import ctypes
 import json
 import os
 import pathlib
+import resource
 import signal
 import stat
 import threading
@@ -21,6 +22,20 @@ from youtube_8up_canvas import Input, parse_input, tile_layout, write_label_png
 
 
 QUEUE_NS = 2_000_000_000
+
+
+def current_rss_mib() -> float:
+    """Return current process RSS on Linux, with a portable peak-RSS fallback."""
+    try:
+        lines = pathlib.Path("/proc/self/status").read_text(encoding="utf-8").splitlines()
+        for line in lines:
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1]) / 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    # Linux reports KiB; macOS and the BSDs report bytes.
+    return peak / (1024 * 1024) if peak > 10_000_000 else peak / 1024
 
 
 def rate_as_float(rate: str) -> float:
@@ -226,6 +241,9 @@ class Output:
         self.timecode_updates = 0
         self.timecode_rate_sample_count = 0
         self.last_sent_at = 0.0
+        self.resource_sample_at = self.started_at
+        self.resource_cpu_seconds = time.process_time()
+        self.process_cpu_cores = 0.0
 
     def _draw_clock(
         self, _overlay: object, context: object, timestamp: int, _duration: int
@@ -402,6 +420,13 @@ class Output:
             sent_age = None if not self.last_sent_at else now - self.last_sent_at
             elapsed = now - self.rate_sample_at
             if elapsed >= 1.0:
+                cpu_seconds = time.process_time()
+                resource_elapsed = max(now - self.resource_sample_at, 0.001)
+                self.process_cpu_cores = (
+                    cpu_seconds - self.resource_cpu_seconds
+                ) / resource_elapsed
+                self.resource_sample_at = now
+                self.resource_cpu_seconds = cpu_seconds
                 self.rates = {
                     "composed_fps": (
                         self.counts["composed"] - self.rate_sample_counts["composed"]
@@ -486,6 +511,8 @@ class Output:
                     "minimum_video_fps": round(minimum_video_fps, 3),
                     "minimum_source_fps": round(minimum_source_fps, 3),
                     "minimum_mux_kbps": round(minimum_mux_kbps, 3),
+                    "process_cpu_cores": round(self.process_cpu_cores, 3),
+                    "process_rss_mib": round(current_rss_mib(), 3),
                     **{name: round(value, 3) for name, value in self.rates.items()},
                 },
             }
@@ -505,7 +532,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--video-encoder", default="nvh264enc")
     result.add_argument("--video-bitrate-kbps", type=int, default=30000)
     result.add_argument("--audio-bitrate-bps", type=int, default=128000)
-    result.add_argument("--audio-rate-hz", type=int, default=44100)
+    result.add_argument("--audio-rate-hz", type=int, default=48000)
     result.add_argument("--rate", default="30/1")
     result.add_argument("--bind", default="127.0.0.1")
     result.add_argument("--port", type=int, default=18120)

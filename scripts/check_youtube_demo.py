@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import time
 import urllib.parse
@@ -26,7 +27,11 @@ def fetch_state(url: str, opener: Callable[..., Any] = urllib.request.urlopen) -
         return json.loads(response.read())
 
 
-def summarize(samples: list[dict[str, Any]], required_sources: int) -> dict[str, Any]:
+def summarize(
+    samples: list[dict[str, Any]],
+    required_sources: int,
+    elapsed_seconds: float | None = None,
+) -> dict[str, Any]:
     if not samples:
         return {"passed": False, "reason": "no samples"}
     outputs = [sample.get("output") for sample in samples]
@@ -51,6 +56,7 @@ def summarize(samples: list[dict[str, Any]], required_sources: int) -> dict[str,
             and all(int(output.get("reconnects", 0)) == 0 for output in typed_outputs)
         ),
         "samples": len(samples),
+        "ready_samples": sum(bool(output.get("ready")) for output in typed_outputs),
         "required_sources": required_sources,
         "failed_checks": failed,
         "composed_fps_min": round(min(float(metric.get("composed_fps", 0.0)) for metric in metrics), 3),
@@ -60,7 +66,13 @@ def summarize(samples: list[dict[str, Any]], required_sources: int) -> dict[str,
         "clock_fps_min": round(min(float(metric.get("timecode_fps", 0.0)) for metric in metrics), 3),
         "source_fps_min": round(min(source_rates), 3) if source_rates else None,
         "reconnects_max": max(int(output.get("reconnects", 0)) for output in typed_outputs),
+        "process_cpu_cores_min": round(min(float(metric.get("process_cpu_cores", 0.0)) for metric in metrics), 3),
+        "process_cpu_cores_max": round(max(float(metric.get("process_cpu_cores", 0.0)) for metric in metrics), 3),
+        "process_rss_mib_min": round(min(float(metric.get("process_rss_mib", 0.0)) for metric in metrics), 3),
+        "process_rss_mib_max": round(max(float(metric.get("process_rss_mib", 0.0)) for metric in metrics), 3),
     }
+    if elapsed_seconds is not None:
+        result["elapsed_seconds"] = round(elapsed_seconds, 3)
     if not result["passed"]:
         result["reason"] = "one or more sustained demo gates failed"
     return result
@@ -83,7 +95,9 @@ def main(argv: list[str] | None = None) -> int:
         url = state_url(args.url)
     except ValueError as error:
         raise SystemExit(str(error)) from error
-    deadline = time.monotonic() + args.seconds
+    started_monotonic = time.monotonic()
+    started_utc = datetime.datetime.now(datetime.timezone.utc)
+    deadline = started_monotonic + args.seconds
     samples: list[dict[str, Any]] = []
     while True:
         try:
@@ -95,7 +109,10 @@ def main(argv: list[str] | None = None) -> int:
         if remaining <= 0:
             break
         time.sleep(min(args.interval, remaining))
-    result = summarize(samples, args.required_sources)
+    completed_utc = datetime.datetime.now(datetime.timezone.utc)
+    result = summarize(samples, args.required_sources, time.monotonic() - started_monotonic)
+    result["started_at_utc"] = started_utc.isoformat()
+    result["completed_at_utc"] = completed_utc.isoformat()
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["passed"] else 1
 
