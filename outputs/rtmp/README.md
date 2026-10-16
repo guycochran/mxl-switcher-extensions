@@ -51,8 +51,23 @@ python3 outputs/rtmp/rtmps_output.py \
   --input 'SOURCE 7=...' --input 'SOURCE 8=...'
 ```
 
-The command line contains only the secret-file path; the key is read and
-applied inside the process.
+For the operator path, launch `youtube_control.py` with the shared MXL domain
+and Program audio flow. It serves a loopback-only control window on port 18121,
+automatically discovers eight active ZoomISO video outputs, and accepts the
+YouTube RTMPS server and masked stream key. The key remains only in process
+memory and is never returned by the API, logged, written to disk, or placed in
+process arguments. Use an SSH tunnel rather than exposing the control port:
+
+```bash
+ssh -N -L 18121:127.0.0.1:18121 media-host
+```
+
+Then open `http://127.0.0.1:18121/`.
+
+When containerized, bind the process to `0.0.0.0` with the explicit
+`--container-bind` acknowledgement, but publish it only as
+`127.0.0.1:18121:18121` on the media host. Never publish the control window on
+the LAN or Internet.
 
 Health is loopback-only on port 18120. A green readiness response requires
 advancing encoded video, advancing encoded audio, and fresh mux output.

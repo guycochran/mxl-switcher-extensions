@@ -13,4 +13,4 @@ COPY common /app/common
 COPY outputs/rtmp /app/outputs/rtmp
 ENV PYTHONPATH=/app
 
-ENTRYPOINT ["python3", "/app/outputs/rtmp/rtmps_output.py"]
+ENTRYPOINT ["python3", "/app/outputs/rtmp/youtube_control.py"]
