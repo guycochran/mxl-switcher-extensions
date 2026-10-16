@@ -181,10 +181,14 @@ The public `main` branch was then cloned into a new directory and exercised by
 following the documented operator sequence rather than using a lab checkout.
 The licensed runtime image and ZoomISO container were preloaded prerequisites;
 no private source tree or saved runtime configuration was reused.
+This was therefore a fresh public-checkout rehearsal on an existing lab host,
+not a from-zero installation of Linux, Docker, or the licensed images.
 
 - `init` selected the operator-supplied MXL domain and wrote a fresh ignored
   configuration; alternate loopback ports let the rehearsal coexist with an
-  unrelated running stack.
+  unrelated running stack. The only manual configuration changes were the
+  documented `deployment_id`, loopback port fields, and absolute `state_dir`;
+  a host without conflicting services can retain their defaults.
 - `doctor` passed Docker, Git, the live 8/8 paired-source requirement, the
   complete licensed base-image contract, the pinned MediaMTX image, and the
   32-logical-CPU capacity recommendation.
