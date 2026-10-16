@@ -231,9 +231,42 @@ people are controlled synthetic participants from the project's test meeting.
 
 ![Eight active ZoomISO MXL test source slots](../../docs/assets/zoomiso-mxl-eight-source-proof.jpg)
 
-![Loopback-only YouTube 4K controller showing eight sources and the CPU signal chain](../../docs/assets/youtube-4k-control-live.jpg)
+![Loopback-only YouTube 4K controller showing eight sources, live cadence, CPU load, and the CPU signal chain](../../docs/assets/youtube-4k-control-live-final.jpg)
 
 These images prove controller-side source selection and transmission state;
 they are not, by themselves, an audience-player acceptance result. Promotion
 still requires a separate YouTube audience screenshot showing the intended
 eight-tile composition plus platform health while the same run is active.
+
+### CPU-only end-to-end demonstration — 2026-10-16
+
+The rebuilt path subsequently delivered the intended eight-source ZoomISO MXL
+composition, smoothly advancing diagnostic timecode, and Program audio to the
+YouTube audience player at 3840x2160, 30000/1001 fps, and a configured 30 Mbps
+video bitrate. The operator confirmed that the complete audience picture and
+sound were present. The controller capture above was taken during that run and
+shows 8/8 advancing sources, 30.0 encoded fps, 47.0 AAC buffers/s, 30.3 Mbps
+sent, 30.0 diagnostic-clock fps, a zero-millisecond send queue, and zero RTMPS
+reconnects.
+
+The no-GPU cloud VM provided 32 logical CPUs and 128 GiB RAM. Six paired
+container samples collected over approximately 36 seconds produced these
+ranges:
+
+| Component | CPU usage | Resident memory |
+| --- | ---: | ---: |
+| ZoomISO ingest and eight MXL publishers | 5.64–7.36 logical CPU cores | 1.551–1.555 GiB |
+| 4K compositor, x264/AAC encode, FLV mux, and RTMPS sender | 8.41–8.98 logical CPU cores | 789–795 MiB |
+| Combined measured containers | 14.05–15.84 of 32 logical CPUs (43.9–49.5%) | 2.32–2.33 GiB |
+
+The output's own process telemetry ranged from 8.05 to 9.80 CPU cores and
+1,038 to 1,041 MiB RSS during the same window; it uses a different process-tree
+accounting method than the container sample and must not be added to the table.
+The live screenshot records a representative 8.5-core / 1,038-MiB point.
+
+This is a successful end-to-end **demonstration**, not yet a sustained
+acceptance result. Five of the six utilization samples were fully green. One
+sample caught a brief upstream-source cadence dip and 471 ms source lateness;
+the encoder still reported 28.5 fps and RTMPS did not reconnect, then all eight
+sources returned to approximately 30 fps. A promotion claim still requires the
+sustained gate and paired audience timecode captures described above.

@@ -98,10 +98,14 @@ four- or eight-source MXL composition, CPU and optional NVENC profiles, a
 loopback-only operator window, in-memory stream-key handling, Program audio,
 and bounded reconnect behavior. Its readiness signal now fails closed unless
 every selected source, encoded video, audio, mux bitrate, and the eight-up
-diagnostic clock are all advancing. A CPU-only cloud run proved the 4K
-H.264/AAC/RTMPS transport path, while the complete eight-participant audience
-gate remains open pending paired YouTube screenshots and a sustained green
-telemetry window. The package is deliberately still labeled `prototype`.
+diagnostic clock are all advancing. A CPU-only cloud run delivered the complete
+eight-source ZoomISO MXL composition, Program audio, and smoothly advancing
+diagnostic timecode to the YouTube audience player at 4K. The documented live
+sample used approximately 14.05–15.84 of the VM's 32 logical CPUs across
+ZoomISO and the output adapter. This proves the end-to-end demonstration; the
+sustained audience acceptance gate remains open pending paired timecode
+captures and a continuously green telemetry window. The package is
+deliberately still labeled `prototype`.
 
 The shared operational layer is implemented today: manifests declare common
 state/liveness/readiness paths, adapters can use the thread-safe lifecycle and
