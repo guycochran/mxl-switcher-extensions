@@ -11,8 +11,8 @@ or acceptance claim.
 
 Current promotion order:
 
-1. finish the paired NDI duration, content-timing, and recovery gates (its
-   short full-rate wire smoke has passed);
+1. finish the paired NDI content-timing and recovery gates (its 10-minute
+   full-rate wire gate has passed);
 2. qualify the meeting-return payload resampler, then repeat local-loopback
    and real-audience gates once the device-clock boundary is observable;
 3. implement SRT with 1,316-byte MPEG-TS alignment and receiver-proven A/V;

@@ -85,11 +85,12 @@ from the accepted video-only Core NDI pilot. It supervises one bounded
 GStreamer pipeline, publishes float32 48 kHz stereo audio with Program video,
 reopens both readers together when either stable MXL flow is replaced, limits
 restarts, and exposes the common loopback health contract. A live receiver
-smoke proved 30.03 fps video and full-rate 48 kHz stereo audio traverse the
-NDI wire. Readiness now requires rate-qualified wire-level A/V proof,
+10-minute receiver gate proved 29.996 fps video and 48,002.7 Hz stereo audio
+traverse the NDI wire without receiver error or sender restart. Readiness now
+requires rate-qualified wire-level A/V proof,
 preventing an incompatible, stalled, or presence-only path from appearing
-healthy. The package remains below candidate
-maturity until sustained timing, recovery, and resource gates pass.
+healthy. The package remains below candidate maturity until content-level A/V
+timing and flow-replacement recovery gates pass.
 
 The shared operational layer is implemented today: manifests declare common
 state/liveness/readiness paths, adapters can use the thread-safe lifecycle and

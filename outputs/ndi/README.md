@@ -5,11 +5,12 @@ Paired Program Master video/audio sent as one NDI source.
 **Maturity: prototype.** The earlier Core NDI pilot accepted independent
 video-only Program and Preview outputs under load. This package extracts that
 flow-replacement behavior, adds the 48 kHz stereo Program audio branch, and
-publishes the common extension health contract. A short live receiver smoke
+publishes the common extension health contract. A 10-minute live receiver gate
 has now proved simultaneous 1080p30 picture and full-rate 48 kHz stereo audio
-over the wire. The independent receiver measured 30.03 fps and 48,163 audio
-sample-frames/s. Duration, content-level A/V timing, recovery, and resource
-gates remain, so the package is not marked accepted.
+over the wire: 18,000 video frames at 29.996 fps and 28,804,800 audio
+sample-frames at 48,002.7 Hz, with no receiver error or sender restart.
+Content-level A/V timing and flow-replacement recovery gates remain, so the
+package is not marked accepted.
 
 `ndi_output.py`:
 
@@ -56,6 +57,7 @@ receiving no grains. The required wire probe prevents that condition from
 being reported as ready.
 
 The adapter does not redistribute the proprietary NDI SDK/runtime. Before
-promotion, qualify sustained picture/audio cadence, content-level A/V offset/drift,
-flow replacement, receiver continuity, CPU/RSS, and restart behavior on the
-target host.
+promotion, qualify content-level A/V offset/drift, flow replacement, receiver
+continuity, and restart behavior on the target host. The 10-minute clean-path
+gate observed sender use of 64.87-94.49% of one CPU core and 66.86-77.42 MiB
+RSS on the test host.
