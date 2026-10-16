@@ -41,6 +41,7 @@ HARD_COUNTERS = (
     "selected_input_regressions", "sustained_unavailable_alarms",
     "sustained_unavailable_active",
 )
+EXAMPLE_CONFIG = pathlib.Path(__file__).with_name("demo-config.example.json")
 
 
 def read_json(path: pathlib.Path) -> dict:
@@ -103,6 +104,94 @@ def load_config(path: pathlib.Path) -> dict:
         raise ValueError("confidence_browser_base must be loopback HTTP with an explicit port")
     cfg["confidence_browser_base"] = browser_base
     return cfg
+
+
+def docker_usable(command: list[str]) -> bool:
+    return subprocess.run([*command, "info"], stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode == 0
+
+
+def detect_docker_command() -> list[str]:
+    if shutil.which("docker") and docker_usable(["docker"]):
+        return ["docker"]
+    if shutil.which("sudo") and shutil.which("docker") and docker_usable(["sudo", "-n", "docker"]):
+        return ["sudo", "-n", "docker"]
+    raise RuntimeError(
+        "Docker is not reachable. Install/start Docker, or grant this account "
+        "access to it, then rerun init."
+    )
+
+
+def volume_mountpoint(docker_command: list[str], name: str) -> str:
+    proc = subprocess.run(
+        [*docker_command, "volume", "inspect", "-f", "{{.Mountpoint}}", name],
+        check=True, text=True, capture_output=True,
+    )
+    mountpoint = proc.stdout.strip()
+    if not mountpoint:
+        raise RuntimeError(f"Docker volume has no mountpoint: {name}")
+    return mountpoint
+
+
+def discover_domain_volumes(docker_command: list[str]) -> list[str]:
+    proc = subprocess.run([*docker_command, "volume", "ls", "--format", "{{.Name}}"],
+                          check=True, text=True, capture_output=True)
+    strong, likely = [], []
+    for name in sorted(filter(None, (line.strip() for line in proc.stdout.splitlines()))):
+        if re.search(r"(?:zoom|mxl)", name, re.IGNORECASE):
+            likely.append(name)
+        try:
+            root = pathlib.Path(volume_mountpoint(docker_command, name))
+            if root.is_dir() and next(root.glob("*.mxl-flow/flow_def.json"), None):
+                strong.append(name)
+        except (OSError, RuntimeError, subprocess.CalledProcessError):
+            continue
+    return strong or likely
+
+
+def init_config(path: pathlib.Path, *, domain_volume: str | None,
+                base_image: str, source_count: int, force: bool) -> None:
+    if path.exists() and not force:
+        raise RuntimeError(f"refusing to overwrite {path}; use --force to replace it")
+    docker_command = detect_docker_command()
+    candidates = discover_domain_volumes(docker_command)
+    if not domain_volume:
+        if len(candidates) == 1:
+            domain_volume = candidates[0]
+        else:
+            detail = ", ".join(candidates) if candidates else "none detected"
+            raise RuntimeError(
+                "choose the ZoomISO MXL Docker volume with --domain-volume NAME "
+                f"(candidates: {detail})"
+            )
+    mountpoint = volume_mountpoint(docker_command, domain_volume)
+    if not pathlib.Path(mountpoint).is_dir():
+        raise RuntimeError(
+            f"MXL volume mountpoint is not readable: {mountpoint}. Run init and "
+            "the later lifecycle commands with one account that can read it."
+        )
+    if not image_exists({"docker": docker_command}, base_image):
+        raise RuntimeError(
+            f"licensed base image {base_image!r} is not installed; load/build it "
+            "or select the correct image with --base-image"
+        )
+    config = read_json(EXAMPLE_CONFIG)
+    config.update({
+        "source_count": source_count,
+        "domain_host_path": mountpoint,
+        "domain_mount_source": domain_volume,
+        "docker": docker_command,
+        "base_image": base_image,
+    })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    # Parse the result before presenting it as usable.
+    load_config(path)
+    print(f"Wrote {path}")
+    print(f"  Docker: {' '.join(docker_command)}")
+    print(f"  MXL volume: {domain_volume}")
+    print(f"  Sources: {source_count}")
+    print("NEXT: map matching ZoomISO MXL video/audio outputs, then run `doctor`.")
 
 
 def quote(command: list[str]) -> str:
@@ -473,6 +562,15 @@ def launch(cfg: dict, apply: bool) -> None:
     print("READY: operator Skin and YouTube controller are loopback-only")
 
 
+def up(cfg: dict, apply: bool) -> None:
+    if not apply:
+        raise RuntimeError("up builds images and starts containers; rerun with --apply")
+    if doctor(cfg):
+        raise RuntimeError("doctor failed; fix the reported item before starting")
+    bootstrap(cfg, apply=True)
+    launch(cfg, apply=True)
+
+
 def status(cfg: dict) -> int:
     failures = 0
     for suffix in OWNED_SUFFIXES:
@@ -633,17 +731,33 @@ def stop(cfg: dict, apply: bool) -> None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("doctor", "prepare", "plan", "bootstrap", "launch", "status", "acceptance", "stop"))
-    parser.add_argument("--config", type=pathlib.Path, required=True)
+    parser.add_argument("command", choices=(
+        "init", "doctor", "prepare", "plan", "bootstrap", "launch", "up",
+        "status", "acceptance", "check", "stop", "down",
+    ))
+    parser.add_argument("--config", type=pathlib.Path,
+                        default=pathlib.Path("demo-config.json"))
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--seconds", type=float, default=30.0,
                         help="observation window for the acceptance command")
+    parser.add_argument("--domain-volume",
+                        help="ZoomISO Docker volume containing the live MXL domain")
+    parser.add_argument("--base-image", default="mxl-lab:latest",
+                        help="installed licensed MXL SDK runtime image")
+    parser.add_argument("--source-count", type=int, choices=(4, 8), default=8)
+    parser.add_argument("--force", action="store_true",
+                        help="allow init to replace an existing config file")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        if args.command == "init":
+            init_config(args.config, domain_volume=args.domain_volume,
+                        base_image=args.base_image, source_count=args.source_count,
+                        force=args.force)
+            return 0
         cfg = load_config(args.config)
         if args.command == "doctor":
             return doctor(cfg)
@@ -653,11 +767,13 @@ def main(argv: list[str] | None = None) -> int:
             bootstrap(cfg, args.apply)
         elif args.command == "launch":
             launch(cfg, args.apply)
+        elif args.command == "up":
+            up(cfg, args.apply)
         elif args.command == "status":
             return status(cfg)
-        elif args.command == "acceptance":
+        elif args.command in ("acceptance", "check"):
             return acceptance(cfg, args.seconds)
-        elif args.command == "stop":
+        elif args.command in ("stop", "down"):
             stop(cfg, args.apply)
         elif args.command == "plan":
             resolved_path = pathlib.Path(cfg["state_dir"]) / "resolved.json"
