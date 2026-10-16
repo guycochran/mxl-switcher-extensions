@@ -42,6 +42,21 @@ class RTMPSOutputTests(unittest.TestCase):
         self.assertNotIn("youtube.com", description)
         self.assertNotIn("secret", description)
 
+    def test_cpu_encoder_uses_x264_properties_not_nvenc_properties(self):
+        args = self.args()
+        args.video_encoder = "x264enc"
+        description = rtmps.pipeline_description(args)
+        self.assertIn("x264enc name=video_encoder bitrate=30000", description)
+        self.assertIn("speed-preset=ultrafast", description)
+        self.assertIn("pass=cbr", description)
+        self.assertIn("key-int-max=60", description)
+        self.assertIn("vbv-buf-capacity=2000", description)
+        self.assertIn("threads=16", description)
+        self.assertIn("sliced-threads=true", description)
+        self.assertNotIn("rc-mode=", description)
+        self.assertNotIn("gop-size=", description)
+        self.assertNotIn("strict-gop=", description)
+
     def test_direct_canvas_has_eight_sources_and_no_intermediate_mxl_sink(self):
         with tempfile.TemporaryDirectory() as directory:
             args = self.args()

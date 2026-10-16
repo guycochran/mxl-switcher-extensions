@@ -22,6 +22,22 @@ from youtube_8up_canvas import Input, parse_input, tile_layout, write_label_png
 QUEUE_NS = 2_000_000_000
 
 
+def video_encoder_description(args: argparse.Namespace) -> list[str]:
+    """Return explicit low-latency settings for the selected H.264 encoder."""
+    if args.video_encoder == "x264enc":
+        return [
+            f"! x264enc name=video_encoder bitrate={args.video_bitrate_kbps}",
+            "tune=zerolatency speed-preset=ultrafast pass=cbr",
+            "key-int-max=60 bframes=0 byte-stream=true aud=true",
+            "vbv-buf-capacity=2000 threads=16 sliced-threads=true",
+        ]
+    return [
+        f"! {args.video_encoder} name=video_encoder bitrate={args.video_bitrate_kbps}",
+        "rc-mode=cbr gop-size=60 bframes=2 aud=true",
+        "strict-gop=true vbv-buffer-size=60000",
+    ]
+
+
 def validate_stream_key(key: str) -> str:
     allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
     if not key or len(key) > 200 or any(char not in allowed for char in key):
@@ -92,10 +108,7 @@ def pipeline_description(args: argparse.Namespace) -> str:
             "! videoconvert n-threads=8",
             f"! video/x-raw,format=NV12,width=3840,height=2160,framerate={args.rate},colorimetry=bt709",
         ])
-    parts.extend([
-        f"! {args.video_encoder} name=video_encoder bitrate={args.video_bitrate_kbps}",
-        "rc-mode=cbr gop-size=60 bframes=2 aud=true",
-        "strict-gop=true vbv-buffer-size=60000",
+    parts.extend(video_encoder_description(args) + [
         "! video/x-h264,profile=high,stream-format=byte-stream,alignment=au",
         "! identity name=encoded_video silent=true ! h264parse config-interval=-1",
         "! queue max-size-time=2000000000 max-size-buffers=0 max-size-bytes=0 ! mux.video",
