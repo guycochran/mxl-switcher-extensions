@@ -79,37 +79,43 @@ def discover_paired_audio(
     sources: list[Input],
     active_seconds: float = 30.0,
 ) -> list[str]:
-    """Return active audio flows paired to selected video devices, in video order."""
+    """Return active audio flows paired to selected video outputs, in video order.
+
+    A video output pairs only with the audio flow carrying the same ZoomISO
+    output number on the same device. One device may publish every numbered
+    output, so device identity alone cannot tell participants apart.
+    """
     now = time.time()
-    video_devices: dict[str, str] = {}
-    audio_by_device: dict[str, tuple[float, str]] = {}
+    video_outputs: dict[str, tuple[str, int]] = {}
+    audio_by_output: dict[tuple[str, int], tuple[float, str]] = {}
     for definition in domain.glob("*.mxl-flow/flow_def.json"):
         try:
             value = json.loads(definition.read_text(encoding="utf-8"))
             flow_id = str(value.get("id", ""))
             device_id = str(value.get("device_id", ""))
+            label = str(value.get("label", ""))
             data = definition.parent / "data"
             if not flow_id or not device_id or not data.exists():
                 continue
             mtime = data.stat().st_mtime
             if now - mtime > active_seconds:
                 continue
-            if value.get("media_type") == "video/v210":
-                video_devices[flow_id] = device_id
-            elif (
-                value.get("media_type") == "audio/float32"
-                and AUDIO_FLOW_LABEL.match(str(value.get("label", "")))
-            ):
-                previous = audio_by_device.get(device_id)
+            video_match = FLOW_LABEL.match(label)
+            audio_match = AUDIO_FLOW_LABEL.match(label)
+            if value.get("media_type") == "video/v210" and video_match:
+                video_outputs[flow_id] = (device_id, int(video_match.group(1)))
+            elif value.get("media_type") == "audio/float32" and audio_match:
+                key = (device_id, int(audio_match.group(1)))
+                previous = audio_by_output.get(key)
                 if previous is None or mtime > previous[0]:
-                    audio_by_device[device_id] = (mtime, flow_id)
+                    audio_by_output[key] = (mtime, flow_id)
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             continue
     result: list[str] = []
     for source in sources:
-        device_id = video_devices.get(source.flow_id)
-        paired = None if device_id is None else audio_by_device.get(device_id)
-        if paired is not None:
+        output = video_outputs.get(source.flow_id)
+        paired = None if output is None else audio_by_output.get(output)
+        if paired is not None and paired[1] not in result:
             result.append(paired[1])
     return result
 
