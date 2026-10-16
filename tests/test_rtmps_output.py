@@ -68,6 +68,10 @@ class RTMPSOutputTests(unittest.TestCase):
             self.assertEqual(description.count("video-flow-id="), 8)
             self.assertIn("compositor name=mix", description)
             self.assertIn("mix.sink_8", description)
+            self.assertIn(
+                "videotestsrc is-live=true pattern=ball animation-mode=frames motion=sweep",
+                description,
+            )
             self.assertIn("rsvgoverlay name=brand_clock fit-to-frame=true", description)
             self.assertNotIn("mxlsink", description)
             self.assertTrue((pathlib.Path(directory) / "brand.png").is_file())

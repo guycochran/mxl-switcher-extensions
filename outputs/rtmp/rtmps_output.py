@@ -175,9 +175,9 @@ def pipeline_description(args: argparse.Namespace) -> str:
             brand = asset_dir / "brand.png"
             write_label_png(brand, tile_width, tile_height, args.brand_text)
             parts.extend([
-                "videotestsrc is-live=true pattern=black",
+                "videotestsrc is-live=true pattern=ball animation-mode=frames motion=sweep",
+                "background-color=0xff071018 foreground-color=0xff26d9e9",
                 f"! video/x-raw,format=BGRA,width={tile_width},height={tile_height},framerate={args.rate}",
-                f"! gdkpixbufoverlay location={brand}",
                 "! rsvgoverlay name=brand_clock fit-to-frame=true",
                 "! queue max-size-buffers=2 leaky=downstream ! mix.sink_8",
             ])
@@ -212,7 +212,9 @@ class Output:
         self.timecode_updates = 0
 
     def _clock_loop(self, pipeline: object, overlay: object) -> None:
-        while not self.stop_event.wait(0.1):
+        # Updating rsvgoverlay reparses the SVG. Once per second keeps the
+        # diagnostic clock obvious without stealing cadence from a 4K CPU encode.
+        while not self.stop_event.wait(1.0):
             with self.lock:
                 if self.pipeline is not pipeline:
                     return
