@@ -14,6 +14,7 @@ NAME = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
 VERS = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$")
 MATURITY = {"concept", "prototype", "candidate", "accepted"}
 KINDS = {"input", "output", "recorder", "playout", "operator_surface"}
+API_PATH = re.compile(r"^/api/v1/[a-z0-9_./-]+$")
 
 
 def load(path: pathlib.Path) -> dict:
@@ -38,6 +39,13 @@ def extension(path: pathlib.Path) -> None:
     roles = item.get("flow_roles", {})
     require(isinstance(roles.get("reads"), list), f"{path}: flow_roles.reads")
     require(isinstance(roles.get("publishes"), list), f"{path}: flow_roles.publishes")
+    health = item.get("health", {})
+    require(health.get("bind_scope") == "loopback", f"{path}: health.bind_scope")
+    for key in ("state_path", "liveness_path", "readiness_path"):
+        require(
+            bool(API_PATH.fullmatch(health.get(key, ""))),
+            f"{path}: health.{key}",
+        )
     entrypoint = item.get("entrypoint")
     if entrypoint is not None:
         require(
