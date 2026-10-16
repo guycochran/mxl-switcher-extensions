@@ -161,15 +161,13 @@ def pipeline_description(args: argparse.Namespace) -> str:
     if inputs:
         asset_dir = pathlib.Path(args.assets_dir)
         for index, source in enumerate(inputs):
-            asset = asset_dir / f"source-{index + 1}.png"
-            label_height = 104 if len(inputs) == 4 else 88
-            write_label_png(asset, tile_width, label_height, source.label)
             parts.extend([
                 f"mxlsrc domain={args.domain} video-flow-id={source.flow_id} automatic-eos=false",
                 "! queue max-size-buffers=3 max-size-bytes=0 max-size-time=0 leaky=downstream",
-                "! videoconvert n-threads=2 ! videoscale method=1 add-borders=false",
+                "! videoscale method=0 add-borders=false",
+                f"! video/x-raw,width={tile_width},height={tile_height},framerate={args.rate}",
+                "! videoconvert n-threads=2",
                 f"! video/x-raw,format=BGRA,width={tile_width},height={tile_height},framerate={args.rate}",
-                f"! gdkpixbufoverlay location={asset} offset-y={tile_height - label_height}",
                 "! queue max-size-buffers=2 leaky=downstream",
                 f"! mix.sink_{index}",
             ])

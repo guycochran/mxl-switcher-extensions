@@ -75,7 +75,8 @@ class RTMPSOutputTests(unittest.TestCase):
             )
             self.assertIn("cairooverlay name=brand_clock", description)
             self.assertNotIn("mxlsink", description)
-            self.assertTrue((pathlib.Path(directory) / "brand.png").is_file())
+            self.assertNotIn("gdkpixbufoverlay", description)
+            self.assertIn("videoscale method=0", description)
 
     def test_live_tile_timecode_uses_requested_cadence(self):
         self.assertEqual(rtmps.running_timecode(0.0, "30000/1001"), "00:00:00:00")
