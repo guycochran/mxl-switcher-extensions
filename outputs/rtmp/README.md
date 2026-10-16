@@ -108,6 +108,16 @@ prints the stream key.
 Capture evidence only after the 30-second gate passes and YouTube Studio says
 `Excellent`:
 
+YouTube does not offer its low-latency mode for 4K live streams. Initial
+`Preparing stream`, black audience video, or a delayed audience timecode is
+therefore not, by itself, a restart signal. If the controller remains green
+with advancing sent Mbps, allow up to 90 seconds for the audience player to
+join the normal-latency stream and make sure the player is at its `LIVE` edge.
+Restart only when the controller's own cadence/destination gate turns red,
+YouTube Studio reports that ingest has stopped, or the 90-second audience
+window expires. Repeated early stop/start cycles reset ingest and make this
+diagnosis harder.
+
 1. Capture the loopback controller with `8/8`, green `LIVE`, about 29.97 encoded
    fps, credible sent Mbps, about 29.97 clock fps, zero reconnects, and all eight
    source rows showing advancing fps.
