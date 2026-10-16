@@ -1,0 +1,10 @@
+ARG BASE_IMAGE=mxl-lab:latest
+FROM ${BASE_IMAGE}
+
+WORKDIR /opt/mxl-operator
+COPY tools/mxl-atem-skin/ /opt/mxl-operator/
+
+ENV PYTHONUNBUFFERED=1 \
+    GST_REGISTRY=/tmp/gstreamer-operator-registry.bin
+
+ENTRYPOINT ["python3"]

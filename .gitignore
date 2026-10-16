@@ -9,3 +9,5 @@ build/
 dist/
 evidence/
 secrets/
+demo-config.json
+.mxl-demo/

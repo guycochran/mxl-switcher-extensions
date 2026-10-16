@@ -3,6 +3,13 @@
 Optional input, output, recording, and deployment integrations for
 [`mxl-switcher-core`](https://github.com/guycochran/mxl-switcher-core).
 
+For the guarded ZoomISO-to-Core-to-YouTube demonstration—including the
+ATEM-style operator Skin and one encoded Program/Preview/multiview confidence
+stack—start with the [end-to-end quickstart](QUICKSTART.md).
+AI-assisted operators should also read the repository's
+[agent operator brief](AGENTS.md); it captures the safety boundary and proof
+required without relying on private project history.
+
 Core is useful without this repository. Install only the bolt-ons your workflow
 requires.
 
