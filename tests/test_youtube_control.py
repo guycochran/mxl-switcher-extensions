@@ -49,6 +49,17 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertIn("kept only in memory", body)
         self.assertNotIn("stream-key-file", body)
 
+    def test_discovery_can_pin_an_instance_by_flow_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.make_flow(directory, "primary-1", 1, "primary-device")
+            self.make_flow(directory, "secondary-1", 1, "secondary-device")
+            self.make_flow(directory, "primary-2", 2, "primary-device-2")
+            found = control.discover_zoomiso_video(
+                pathlib.Path(directory),
+                preferred_flow_ids={"primary-1", "primary-2"},
+            )
+            self.assertEqual([item.flow_id for item in found], ["primary-1", "primary-2"])
+
     def test_control_parser_does_not_require_secret_on_command_line(self):
         args = control.parser().parse_args(["--audio-flow", "audio-id"])
         self.assertIsNone(args.stream_key_file)
@@ -56,6 +67,7 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertFalse(args.container_bind)
         self.assertEqual(args.source_count, 4)
         self.assertEqual(args.active_seconds, 30.0)
+        self.assertIsNone(args.preferred_flow)
 
 
 if __name__ == "__main__":

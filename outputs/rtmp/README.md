@@ -66,7 +66,10 @@ Then open `http://127.0.0.1:18121/`.
 
 Use `--source-count 8` to select the original eight-up layout. Discovery keeps
 one freshest writer for each numbered ZoomISO output and tolerates the source's
-normal metadata update cadence without presenting duplicate inputs.
+normal metadata update cadence without presenting duplicate inputs. On a host
+running multiple identically named ZoomISO instances, repeat `--preferred-flow`
+with the intended instance's four or eight video flow IDs to prevent a source
+number from switching between writers.
 
 When containerized, bind the process to `0.0.0.0` with the explicit
 `--container-bind` acknowledgement, but publish it only as

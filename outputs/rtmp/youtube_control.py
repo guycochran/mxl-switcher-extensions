@@ -24,7 +24,11 @@ FLOW_LABEL = re.compile(r"^ZoomISO Cloud Instance Output (\d+) Video$")
 MAX_REQUEST_BYTES = 8192
 
 
-def discover_zoomiso_video(domain: pathlib.Path, active_seconds: float = 30.0) -> list[Input]:
+def discover_zoomiso_video(
+    domain: pathlib.Path,
+    active_seconds: float = 30.0,
+    preferred_flow_ids: set[str] | None = None,
+) -> list[Input]:
     """Return one freshest active ZoomISO flow per numbered output."""
     now = time.time()
     found: list[tuple[int, str, Input, float]] = []
@@ -39,6 +43,8 @@ def discover_zoomiso_video(domain: pathlib.Path, active_seconds: float = 30.0) -
             if now - mtime > active_seconds:
                 continue
             flow_id = str(value["id"])
+            if preferred_flow_ids and flow_id not in preferred_flow_ids:
+                continue
             device_id = str(value.get("device_id", ""))
             number = int(match.group(1))
             found.append((number, device_id, Input(f"ZOOM {number}", flow_id), mtime))
@@ -63,7 +69,11 @@ class Controller:
         self.last_action = "Waiting for destination"
 
     def sources(self) -> list[Input]:
-        return discover_zoomiso_video(pathlib.Path(self.args.domain), self.args.active_seconds)
+        return discover_zoomiso_video(
+            pathlib.Path(self.args.domain),
+            self.args.active_seconds,
+            set(self.args.preferred_flow or ()),
+        )
 
     def snapshot(self) -> dict[str, Any]:
         sources = self.sources()
@@ -219,6 +229,10 @@ def parser() -> argparse.ArgumentParser:
     result.set_defaults(stream_key_file=None, port=18121)
     result.add_argument("--active-seconds", type=float, default=30.0)
     result.add_argument("--source-count", type=int, choices=(4, 8), default=4)
+    result.add_argument(
+        "--preferred-flow", action="append",
+        help="restrict automatic discovery to an explicitly selected ZoomISO video flow",
+    )
     result.add_argument(
         "--container-bind", action="store_true",
         help="allow 0.0.0.0 inside a container whose port is published on host loopback only",
