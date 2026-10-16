@@ -1,0 +1,10 @@
+ARG BASE_IMAGE=mxl-lab:latest
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+COPY common /app/common
+COPY outputs/rtmp /app/outputs/rtmp
+ENV PYTHONPATH=/app \
+    GST_REGISTRY=/tmp/gstreamer-runtime-registry.bin
+
+ENTRYPOINT ["python3", "/app/outputs/rtmp/youtube_control.py"]

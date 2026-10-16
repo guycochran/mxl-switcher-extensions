@@ -3,6 +3,13 @@
 Optional input, output, recording, and deployment integrations for
 [`mxl-switcher-core`](https://github.com/guycochran/mxl-switcher-core).
 
+For the guarded ZoomISO-to-Core-to-YouTube demonstration—including the
+ATEM-style operator Skin and one encoded Program/Preview/multiview confidence
+stack—start with the [end-to-end quickstart](QUICKSTART.md).
+AI-assisted operators should also read the repository's
+[agent operator brief](AGENTS.md); it captures the safety boundary and proof
+required without relying on private project history.
+
 Core is useful without this repository. Install only the bolt-ons your workflow
 requires.
 
@@ -54,6 +61,7 @@ Stopping, restarting, or failing one extension must not interrupt Core or
 another extension.
 
 See [extension contract](docs/EXTENSION_CONTRACT.md) and
+[broadcast-readiness plan](docs/BROADCAST_READINESS.md), plus
 [Core's output-node architecture](https://github.com/guycochran/mxl-switcher-core/blob/main/docs/OUTPUT_ARCHITECTURE.md).
 
 ## Current starting point
@@ -91,6 +99,27 @@ requires rate-qualified wire-level A/V proof,
 preventing an incompatible, stalled, or presence-only path from appearing
 healthy. The package remains below candidate maturity until content-level A/V
 timing and flow-replacement recovery gates pass.
+
+The [YouTube RTMPS output](outputs/rtmp) is a working 4K prototype with direct
+four- or eight-source MXL composition, CPU and optional NVENC profiles, a
+loopback-only operator window, in-memory stream-key handling, Program audio,
+and bounded reconnect behavior. Its readiness signal now fails closed unless
+every selected source, encoded video, audio, mux bitrate, and the eight-up
+diagnostic clock are all advancing. A CPU-only cloud run delivered the complete
+eight-source ZoomISO MXL composition, Program audio, and smoothly advancing
+diagnostic timecode to the YouTube audience player at 4K. The documented live
+sample used approximately 14.05–15.84 of the VM's 32 logical CPUs across
+ZoomISO and the output adapter. This proves the end-to-end demonstration; the
+sustained audience acceptance gate remains open pending paired timecode
+captures and a continuously green telemetry window. The package is
+deliberately still labeled `prototype`.
+
+The follow-up controller build can derive one paired audio flow per selected
+ZoomISO video source and mix all eight into the stereo Program bus. Its final
+pre-shutdown state reported eight active video sources and eight active audio
+sources. This expands the demonstrated single-source Program audio path, but
+the new eight-source mix still needs a separate audience-listening gate before
+it is described as accepted broadcast audio.
 
 The shared operational layer is implemented today: manifests declare common
 state/liveness/readiness paths, adapters can use the thread-safe lifecycle and

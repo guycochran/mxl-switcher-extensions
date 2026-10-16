@@ -1,0 +1,19 @@
+FROM mxl-lab:latest
+
+ARG NVIDIA_DRIVER_SERIES=580
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        "libnvidia-compute-${NVIDIA_DRIVER_SERIES}" \
+        "libnvidia-encode-${NVIDIA_DRIVER_SERIES}" \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY common /app/common
+COPY outputs/rtmp /app/outputs/rtmp
+# The base image can contain a registry generated before GPU devices existed;
+# force one runtime scan so nvcodec is not retained as blacklisted.
+ENV PYTHONPATH=/app \
+    GST_REGISTRY=/tmp/gstreamer-runtime-registry.bin
+
+ENTRYPOINT ["python3", "/app/outputs/rtmp/youtube_control.py"]
