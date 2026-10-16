@@ -11,7 +11,8 @@ RTSP-derived, timestamp-regenerating path is retained only as a lesson.
 The direct multi-view mode builds a 3840x2160p30 canvas from four or eight MXL
 video sources. Four-up is a 2x2 layout of native-resolution 1920x1080 tiles and
 is the preferred local proof profile. Eight-up uses eight 1280x720 tiles in a
-3x3 canvas with a branded ninth cell. Both feed NVENC directly, avoiding an
+3x3 canvas with a branded ninth cell and a visibly advancing running timecode.
+Both feed NVENC directly, avoiding an
 unnecessary 4K uncompressed intermediate flow while remaining independent of
 Core.
 

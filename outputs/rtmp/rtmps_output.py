@@ -22,6 +22,42 @@ from youtube_8up_canvas import Input, parse_input, tile_layout, write_label_png
 QUEUE_NS = 2_000_000_000
 
 
+def rate_as_float(rate: str) -> float:
+    numerator, denominator = (int(part) for part in rate.split("/", 1))
+    if numerator <= 0 or denominator <= 0:
+        raise ValueError("frame rate must be a positive fraction")
+    return numerator / denominator
+
+
+def running_timecode(elapsed: float, rate: str) -> str:
+    """Return a display timecode driven by monotonic pipeline run time."""
+    fps = rate_as_float(rate)
+    nominal_fps = max(1, round(fps))
+    elapsed = max(0.0, elapsed)
+    total_seconds = int(elapsed)
+    frames = min(nominal_fps - 1, int((elapsed - total_seconds) * fps))
+    seconds = total_seconds % 60
+    minutes = (total_seconds // 60) % 60
+    hours = (total_seconds // 3600) % 100
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frames:02d}"
+
+
+def timecode_svg(elapsed: float, rate: str) -> str:
+    """Build the dependency-free SVG used by the live ninth canvas tile."""
+    value = running_timecode(elapsed, rate)
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" '
+        'viewBox="0 0 1280 720">'
+        '<rect x="110" y="190" width="1060" height="330" rx="28" '
+        'fill="#071018" fill-opacity="0.92" stroke="#26d9e9" stroke-width="4"/>'
+        '<text x="640" y="300" text-anchor="middle" fill="#26d9e9" '
+        'font-family="monospace" font-size="58" font-weight="700">LIVE TIMECODE</text>'
+        f'<text x="640" y="440" text-anchor="middle" fill="#f4f7ff" '
+        f'font-family="monospace" font-size="132" font-weight="700">{value}</text>'
+        '</svg>'
+    )
+
+
 def video_encoder_description(args: argparse.Namespace) -> list[str]:
     """Return explicit low-latency settings for the selected H.264 encoder."""
     if args.video_encoder == "x264enc":
@@ -142,6 +178,7 @@ def pipeline_description(args: argparse.Namespace) -> str:
                 "videotestsrc is-live=true pattern=black",
                 f"! video/x-raw,format=BGRA,width={tile_width},height={tile_height},framerate={args.rate}",
                 f"! gdkpixbufoverlay location={brand}",
+                "! rsvgoverlay name=brand_clock fit-to-frame=true",
                 "! queue max-size-buffers=2 leaky=downstream ! mix.sink_8",
             ])
         else:
@@ -172,6 +209,17 @@ class Output:
         self.rate_sample_at = self.started_at
         self.rate_sample_counts = {"video": 0, "audio": 0, "mux_bytes": 0}
         self.rates = {"video_fps": 0.0, "audio_buffers_per_second": 0.0, "mux_kbps": 0.0}
+        self.timecode_updates = 0
+
+    def _clock_loop(self, pipeline: object, overlay: object) -> None:
+        while not self.stop_event.wait(0.1):
+            with self.lock:
+                if self.pipeline is not pipeline:
+                    return
+                elapsed = time.monotonic() - self.started_at
+            overlay.set_property("data", timecode_svg(elapsed, self.args.rate))
+            with self.lock:
+                self.timecode_updates += 1
 
     def _redact(self, value: object) -> str:
         return str(value).replace(self.stream_key, "<redacted>").replace(
@@ -196,6 +244,9 @@ class Output:
         pipeline = self.Gst.parse_launch(pipeline_description(self.args))
         sink = pipeline.get_by_name("destination")
         sink.set_property("location", self.url)
+        clock_overlay = pipeline.get_by_name("brand_clock")
+        if clock_overlay is not None:
+            clock_overlay.set_property("data", timecode_svg(0.0, self.args.rate))
         for element_name, metric in (
             ("encoded_video", "video"), ("encoded_audio", "audio"), ("mux_bytes", "mux")
         ):
@@ -210,6 +261,13 @@ class Output:
             self.state = "streaming"
             self.last_error = None
             self.revision += 1
+        if clock_overlay is not None:
+            threading.Thread(
+                target=self._clock_loop,
+                args=(pipeline, clock_overlay),
+                name="youtube-live-timecode",
+                daemon=True,
+            ).start()
 
     def _stop_pipeline(self) -> None:
         if self.pipeline is not None:
@@ -300,6 +358,7 @@ class Output:
                     "audio_rate_hz": self.args.audio_rate_hz,
                     "resolution": "3840x2160", "frame_rate": self.args.rate,
                     "queue_bound_ns": QUEUE_NS,
+                    "timecode_updates": self.timecode_updates,
                     **{name: round(value, 3) for name, value in self.rates.items()},
                 },
             }

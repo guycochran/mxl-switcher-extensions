@@ -68,8 +68,16 @@ class RTMPSOutputTests(unittest.TestCase):
             self.assertEqual(description.count("video-flow-id="), 8)
             self.assertIn("compositor name=mix", description)
             self.assertIn("mix.sink_8", description)
+            self.assertIn("rsvgoverlay name=brand_clock fit-to-frame=true", description)
             self.assertNotIn("mxlsink", description)
             self.assertTrue((pathlib.Path(directory) / "brand.png").is_file())
+
+    def test_live_tile_timecode_uses_requested_cadence(self):
+        self.assertEqual(rtmps.running_timecode(0.0, "30000/1001"), "00:00:00:00")
+        self.assertEqual(rtmps.running_timecode(61.5, "30/1"), "00:01:01:15")
+        svg = rtmps.timecode_svg(61.5, "30/1")
+        self.assertIn("LIVE TIMECODE", svg)
+        self.assertIn("00:01:01:15", svg)
 
     def test_direct_four_up_canvas_uses_native_1080p_quadrants(self):
         with tempfile.TemporaryDirectory() as directory:
