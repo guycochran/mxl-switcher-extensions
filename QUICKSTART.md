@@ -63,7 +63,9 @@ generated file contains no credentials or flow UUIDs.
 Start ZoomISO Cloud, join the meeting, authorize capture, and map four or eight
 numbered outputs as native MXL with matching audio. Wait until every mapped row
 shows incoming video. This licensed, interactive step is deliberately not
-automated.
+automated. When **Capture** is enabled, ZoomISO Cloud automatically requests and
+grants the recording permission needed for capture; the operator does not need
+to grant that permission separately.
 
 For a non-production source, the public
 [Office Hours Zoom Test](https://officehours.global/zoomtest) page provides the
