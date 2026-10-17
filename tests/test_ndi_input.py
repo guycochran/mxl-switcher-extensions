@@ -1,5 +1,7 @@
 import argparse
 import importlib.util
+import json
+import os
 import pathlib
 import subprocess
 import tempfile
@@ -62,11 +64,13 @@ class CommandTests(unittest.TestCase):
 
     def test_direct_address_and_fractional_rate_are_argv_only(self):
         argv = command(
+            source_name=None,
             source_address="192.0.2.10:5961",
             rate_numerator=30000,
             rate_denominator=1001,
         )
         self.assertIn("url-address=192.0.2.10:5961", argv)
+        self.assertFalse(any(value.startswith("ndi-name=") for value in argv))
         self.assertIn("video/x-raw,framerate=30000/1001", argv)
 
     def test_optional_audio_is_normalized_and_disabled_audio_is_absent(self):
@@ -89,6 +93,10 @@ class CommandTests(unittest.TestCase):
             command(audio_mode="required", audio_flow=None)
         with self.assertRaises(ValueError):
             command(timestamp_mode="guess")
+        with self.assertRaises(ValueError):
+            command(source_name="CAMERA", source_address="192.0.2.10:5961")
+        with self.assertRaises(ValueError):
+            command(source_name=None, source_address=None)
 
     def test_plugin_preflight_fails_closed(self):
         seen = []
@@ -133,12 +141,30 @@ class LifecycleTests(unittest.TestCase):
             poll_seconds=0.01,
             stop_timeout_seconds=0.1,
         )
-        self.module = ndi.NDIInput(self.args, popen=popen, clock=lambda: 10.0)
+        self.module = ndi.NDIInput(
+            self.args,
+            popen=popen,
+            clock=lambda: 10.0,
+            wall_clock=lambda: 1_000.0,
+        )
+
+    def flow(self, flow_id, media_type, age=0):
+        directory = self.domain / f"{flow_id}.mxl-flow"
+        directory.mkdir()
+        (directory / "flow_def.json").write_text(json.dumps({
+            "id": flow_id,
+            "media_type": media_type,
+        }))
+        data = directory / "data"
+        data.write_bytes(b"grain")
+        now = 1_000.0
+        os.utime(data, (now - age, now - age))
+        return directory
 
     def test_optional_audio_does_not_block_video_readiness(self):
         self.module.start()
         self.assertEqual(self.module.check(), "wait")
-        (self.domain / "video.mxl-flow").mkdir()
+        self.flow("video", "video/v210")
         self.assertEqual(self.module.check(), "healthy")
         state = self.module.snapshot()
         self.assertEqual((state["state"], state["ready"]), ("running", True))
@@ -148,11 +174,41 @@ class LifecycleTests(unittest.TestCase):
 
     def test_required_audio_blocks_until_both_flows_exist(self):
         self.args.audio_mode = "required"
-        module = ndi.NDIInput(self.args, popen=self.module.popen, clock=lambda: 10.0)
+        module = ndi.NDIInput(
+            self.args,
+            popen=self.module.popen,
+            clock=lambda: 10.0,
+            wall_clock=lambda: 1_000.0,
+        )
+        module.start()
+        self.flow("video", "video/v210")
+        self.assertEqual(module.check(), "wait")
+        self.flow("audio", "audio/float32")
+        self.assertEqual(module.check(), "healthy")
+
+    def test_presence_only_wrong_type_and_stale_output_are_not_ready(self):
+        module = ndi.NDIInput(
+            self.args,
+            popen=self.module.popen,
+            clock=lambda: 10.0,
+            wall_clock=lambda: 1_000.0,
+        )
         module.start()
         (self.domain / "video.mxl-flow").mkdir()
         self.assertEqual(module.check(), "wait")
-        (self.domain / "audio.mxl-flow").mkdir()
+        (self.domain / "video.mxl-flow").rmdir()
+        stale = self.flow("video", "video/v210", age=61)
+        self.assertEqual(module.check(), "wait")
+        os.utime(stale / "data", (1_000.0, 1_000.0))
+        (stale / "flow_def.json").write_text(json.dumps({
+            "id": "video",
+            "media_type": "audio/float32",
+        }))
+        self.assertEqual(module.check(), "wait")
+        (stale / "flow_def.json").write_text(json.dumps({
+            "id": "video",
+            "media_type": "video/v210",
+        }))
         self.assertEqual(module.check(), "healthy")
 
     def test_exit_requests_one_bounded_restart_then_fails_closed(self):

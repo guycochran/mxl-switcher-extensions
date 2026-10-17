@@ -55,9 +55,10 @@ docker run --rm --network host \
   --port 18130
 ```
 
-For direct connection, add `--source-address host:port`. NDI Discovery Server
-configuration remains an NDI-runtime concern and can be supplied through the
-runtime's normal NDI configuration directory.
+For direct connection, use `--source-address host:port` instead of
+`--source-name`. The two selectors are intentionally mutually exclusive. NDI
+Discovery Server configuration remains an NDI-runtime concern and can be
+supplied through the runtime's normal NDI configuration directory.
 
 Health endpoints bind to loopback by default:
 
@@ -66,8 +67,9 @@ Health endpoints bind to loopback by default:
 - `GET /api/v1/health/ready`
 
 Readiness requires the media process to be alive and the configured video MXL
-flow to exist. Required audio must also exist; optional audio never blocks video
-readiness. These checks prove process and flow availability, not moving-picture
+flow to have a valid definition plus recently written data. Required audio must
+meet the same check; optional audio never blocks video readiness. The activity
+window accounts for mmap writeback lag, but it does not prove moving-picture
 cadence. Use the qualification gates in [PLAN.md](PLAN.md) before promotion.
 
 ## Timestamp selection

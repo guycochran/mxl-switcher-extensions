@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import pathlib
 import signal
@@ -26,6 +27,7 @@ from common.runtime import ExtensionRuntime, RestartBudget
 VIDEO_QUEUE_BUFFERS = 4
 AUDIO_QUEUE_NS = 200_000_000
 AUDIO_RATE = 48_000
+FLOW_ACTIVE_SECONDS = 60.0
 ALLOWED_CHANNELS = (1, 2, 4, 8)
 TIMESTAMP_MODES = ("receive-time", "timestamp", "timecode")
 REQUIRED_PLUGINS = (
@@ -49,7 +51,7 @@ def _fraction(numerator: int, denominator: int) -> str:
 def gst_command(
     *,
     domain: str,
-    source_name: str,
+    source_name: str | None,
     source_address: str | None,
     video_flow: str,
     audio_flow: str | None,
@@ -67,10 +69,10 @@ def gst_command(
     _flow_name(video_flow)
     if audio_flow is not None:
         _flow_name(audio_flow)
-    if not source_name.strip():
-        raise ValueError("NDI source name is required")
-    if source_address is not None and not source_address.strip():
-        raise ValueError("NDI source address cannot be blank")
+    source_name = None if source_name is None else source_name.strip()
+    source_address = None if source_address is None else source_address.strip()
+    if bool(source_name) == bool(source_address):
+        raise ValueError("configure exactly one NDI source name or direct address")
     if audio_mode not in {"optional", "required", "disabled"}:
         raise ValueError("unknown audio mode")
     if audio_mode != "disabled" and audio_flow is None:
@@ -85,8 +87,10 @@ def gst_command(
         raise ValueError("audio channels must be 1, 2, 4, or 8")
 
     rate = _fraction(rate_numerator, rate_denominator)
-    source = ["ndisrc", f"ndi-name={source_name}"]
-    if source_address is not None:
+    source = ["ndisrc"]
+    if source_name is not None:
+        source.append(f"ndi-name={source_name}")
+    else:
         source.append(f"url-address={source_address}")
     source.extend([f"timestamp-mode={timestamp_mode}", "!", "ndisrcdemux", "name=demux"])
 
@@ -142,10 +146,12 @@ class NDIInput:
         *,
         popen: Callable[..., subprocess.Popen] = subprocess.Popen,
         clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
     ) -> None:
         self.args = args
         self.popen = popen
         self.clock = clock
+        self.wall_clock = wall_clock
         self.runtime = ExtensionRuntime("ndi-mxl-input", "input")
         self.budget = RestartBudget(args.max_restarts, args.restart_window_seconds, clock=clock)
         self.process: subprocess.Popen | None = None
@@ -156,16 +162,29 @@ class NDIInput:
     def _flow_dir(self, flow: str | None) -> pathlib.Path | None:
         return None if flow is None else self.args.domain / f"{_flow_name(flow)}.mxl-flow"
 
-    def _available(self, flow: str | None) -> bool:
+    def _available(self, flow: str | None, media_type: str) -> bool:
         path = self._flow_dir(flow)
-        return path is not None and path.is_dir()
+        if path is None:
+            return False
+        try:
+            definition = json.loads((path / "flow_def.json").read_text(encoding="utf-8"))
+            data = path / "data"
+            return (
+                str(definition.get("id")) == flow
+                and definition.get("media_type") == media_type
+                and data.is_file()
+                and self.wall_clock() - data.stat().st_mtime <= FLOW_ACTIVE_SECONDS
+            )
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            return False
 
     def _metrics(self) -> dict:
         alive = self.process is not None and self.process.poll() is None
         return {
             "pipeline_alive": alive,
-            "video_output_available": self._available(self.args.video_flow),
-            "audio_output_available": self._available(self.args.audio_flow),
+            "video_output_available": self._available(self.args.video_flow, "video/v210"),
+            "audio_output_available": self._available(self.args.audio_flow, "audio/float32"),
+            "flow_active_window_seconds": FLOW_ACTIVE_SECONDS,
             "audio_mode": self.args.audio_mode,
             "target_width": self.args.width,
             "target_height": self.args.height,
@@ -245,9 +264,9 @@ class NDIInput:
             if self.process is None or self.process.poll() is not None:
                 self.runtime.transition("degraded", ready=False, error="NDI pipeline exited")
                 return "restart"
-            video_available = self._available(self.args.video_flow)
+            video_available = self._available(self.args.video_flow, "video/v210")
             audio_required = self.args.audio_mode == "required"
-            audio_available = self._available(self.args.audio_flow)
+            audio_available = self._available(self.args.audio_flow, "audio/float32")
             if not video_available or (audio_required and not audio_available):
                 self.runtime.transition("degraded", ready=False, error="configured MXL output is unavailable")
                 return "wait"
@@ -288,8 +307,9 @@ class NDIInput:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--domain", type=pathlib.Path, required=True)
-    parser.add_argument("--source-name", required=True)
-    parser.add_argument("--source-address")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--source-name")
+    source.add_argument("--source-address")
     parser.add_argument("--video-flow", required=True)
     parser.add_argument("--audio-flow")
     parser.add_argument("--audio-mode", choices=("optional", "required", "disabled"), default="optional")
