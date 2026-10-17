@@ -90,7 +90,7 @@ class NDIBank:
                     raise RuntimeError("restart budget exhausted")
                 self.runtime.record_restart()
             self.process = self.popen(self._command(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL, start_new_session=True)
+                                      start_new_session=True)
             self.started_at = self.clock()
 
     def check(self) -> str:

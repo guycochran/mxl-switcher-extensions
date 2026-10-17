@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import signal
+import sys
 import threading
 
 
@@ -80,8 +81,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     failed = message.type == Gst.MessageType.ERROR
     if failed:
-        error, debug = message.parse_error()
-        print(f"NDI pipeline error: {error}: {debug}", flush=True)
+        error, _debug = message.parse_error()
+        print(f"NDI pipeline error: {error}", file=sys.stderr, flush=True)
     pipeline.set_state(Gst.State.NULL)
     return 1 if failed else 0
 
