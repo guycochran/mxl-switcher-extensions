@@ -70,6 +70,7 @@ def gst_command(
     height: int,
     rate_numerator: int,
     rate_denominator: int,
+    rate_mode: str,
     timestamp_mode: str,
     pacing_mode: str,
     convert_threads: int,
@@ -92,6 +93,8 @@ def gst_command(
         raise ValueError("width and height must be positive")
     if timestamp_mode not in TIMESTAMP_MODES:
         raise ValueError("unknown timestamp mode")
+    if rate_mode not in {"normalize", "passthrough"}:
+        raise ValueError("unknown rate mode")
     if pacing_mode not in {"none", "clock-sync", "retimestamp-clock-sync"}:
         raise ValueError("unknown pacing mode")
     if not 1 <= convert_threads <= 32:
@@ -112,13 +115,20 @@ def gst_command(
         "demux.video", "!",
         "queue", f"max-size-buffers={VIDEO_QUEUE_BUFFERS}",
         "max-size-time=0", "max-size-bytes=0", "leaky=downstream", "!",
+    ]
+    if rate_mode == "normalize":
         # Normalize cadence before the expensive scale and v210 conversion.
-        "videorate", "!", f"video/x-raw,framerate={rate}", "!",
+        command.extend(["videorate", "!", f"video/x-raw,framerate={rate}", "!"])
+    else:
+        # A sender already running at the target cadence should not pass through
+        # videorate: some NDI clock modes can otherwise lose real-time cadence.
+        command.extend([f"video/x-raw,framerate={rate}", "!"])
+    command.extend([
         "videoscale", "add-borders=true", "!",
         f"video/x-raw,width={width},height={height},pixel-aspect-ratio=1/1", "!",
         "videoconvert", f"n-threads={convert_threads}", "!",
         "video/x-raw,format=v210", "!",
-    ]
+    ])
     if pacing_mode == "retimestamp-clock-sync":
         command.extend([
             "identity",
@@ -212,6 +222,7 @@ class NDIInput:
             "target_height": self.args.height,
             "target_rate_numerator": self.args.rate_numerator,
             "target_rate_denominator": self.args.rate_denominator,
+            "rate_mode": self.args.rate_mode,
             "timestamp_mode": self.args.timestamp_mode,
             "pacing_mode": self.args.pacing_mode,
             "convert_threads": self.args.convert_threads,
@@ -250,6 +261,7 @@ class NDIInput:
                 height=self.args.height,
                 rate_numerator=self.args.rate_numerator,
                 rate_denominator=self.args.rate_denominator,
+                rate_mode=self.args.rate_mode,
                 timestamp_mode=self.args.timestamp_mode,
                 pacing_mode=self.args.pacing_mode,
                 convert_threads=self.args.convert_threads,
@@ -342,6 +354,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=1080)
     parser.add_argument("--rate-numerator", type=int, default=30)
     parser.add_argument("--rate-denominator", type=int, default=1)
+    parser.add_argument(
+        "--rate-mode",
+        choices=("normalize", "passthrough"),
+        default="normalize",
+        help="normalize variable-rate sources or pass through a sender already at the target cadence",
+    )
     parser.add_argument(
         "--timestamp-mode",
         choices=TIMESTAMP_MODES,

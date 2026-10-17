@@ -38,6 +38,7 @@ def command(**overrides):
         "height": 1080,
         "rate_numerator": 30,
         "rate_denominator": 1,
+        "rate_mode": "normalize",
         "timestamp_mode": "timestamp",
         "pacing_mode": "none",
         "convert_threads": 4,
@@ -77,6 +78,12 @@ class CommandTests(unittest.TestCase):
     def test_clocked_timestamp_mode_is_explicitly_supported(self):
         self.assertIn("timestamp-mode=clocked", command(timestamp_mode="clocked"))
 
+    def test_passthrough_rate_omits_videorate_but_requires_target_caps(self):
+        argv = command(rate_mode="passthrough")
+        self.assertNotIn("videorate", argv)
+        self.assertIn("video/x-raw,framerate=30/1", argv)
+        self.assertLess(argv.index("video/x-raw,framerate=30/1"), argv.index("videoscale"))
+
     def test_clock_sync_paces_after_conversion_before_mxl(self):
         argv = command(pacing_mode="clock-sync")
         self.assertLess(argv.index("videoconvert"), argv.index("clocksync"))
@@ -113,6 +120,8 @@ class CommandTests(unittest.TestCase):
             command(timestamp_mode="guess")
         with self.assertRaises(ValueError):
             command(pacing_mode="guess")
+        with self.assertRaises(ValueError):
+            command(rate_mode="guess")
         with self.assertRaises(ValueError):
             command(source_name="CAMERA", source_address="192.0.2.10:5961")
         with self.assertRaises(ValueError):
@@ -154,6 +163,7 @@ class LifecycleTests(unittest.TestCase):
             height=1080,
             rate_numerator=30,
             rate_denominator=1,
+            rate_mode="normalize",
             timestamp_mode="timestamp",
             pacing_mode="none",
             convert_threads=4,
