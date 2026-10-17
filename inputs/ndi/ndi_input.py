@@ -153,6 +153,13 @@ def gst_command(
             "single-segment=true",
             "!",
         ])
+        if startup_gate:
+            command.extend([
+                "queue", f"name=pacing_queue_{branch_name}",
+                f"max-size-buffers={BANK_VIDEO_QUEUE_BUFFERS}",
+                f"min-threshold-buffers={BANK_VIDEO_QUEUE_PREROLL}",
+                "max-size-time=0", "max-size-bytes=0", "!",
+            ])
     if pacing_mode in {"clock-sync", "retimestamp-clock-sync"}:
         if startup_gate:
             command.extend(["clocksync", f"name=clock_sync_{branch_name}", "sync-to-first=false", "!"])
