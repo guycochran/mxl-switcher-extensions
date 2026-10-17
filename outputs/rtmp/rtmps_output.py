@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import collections
 import ctypes
 import json
 import os
@@ -25,7 +26,11 @@ QUEUE_NS = 2_000_000_000
 COMPOSITOR_LATENCY_NS = 100_000_000
 MUX_LATENCY_NS = 300_000_000
 SEND_QUEUE_READY_NS = 500_000_000
-SOURCE_LATENESS_READY_NS = COMPOSITOR_LATENCY_NS - 10_000_000
+# Crossing 90 ms is an early warning. The compositor can still accept a frame
+# until its configured latency plus one frame interval; fail only at that real
+# deadline instead of turning a recoverable warning into a false outage.
+SOURCE_LATENESS_WARN_NS = 90_000_000
+BITRATE_WINDOW_SECONDS = 4.0
 RTMP_CHUNK_SIZE = 4096
 # AAC-LC emits one encoded buffer per 1024 PCM samples per channel.
 AAC_FRAME_SAMPLES = 1024
@@ -298,8 +303,11 @@ class Output:
         }
         self.rate_sample_at = self.started_at
         self.rate_sample_counts = {
-            "composed": 0, "video": 0, "audio": 0, "mux_bytes": 0, "sent_bytes": 0,
+            "composed": 0, "video": 0, "audio": 0,
         }
+        self.bitrate_samples = collections.deque([
+            (self.started_at, 0, 0),
+        ])
         self.source_rate_sample_counts = dict(self.source_counts)
         self.rates = {"video_fps": 0.0, "audio_buffers_per_second": 0.0, "mux_kbps": 0.0}
         self.source_rates = {name: 0.0 for name in self.source_counts}
@@ -505,6 +513,38 @@ class Output:
                 if sent_bytes > self.counts["sent_bytes"]:
                     self.last_sent_at = now
                 self.counts["sent_bytes"] = sent_bytes
+            current_bitrate_counts = (
+                now, self.counts["mux_bytes"], self.counts["sent_bytes"]
+            )
+            if (
+                self.bitrate_samples
+                and (
+                    current_bitrate_counts[1] < self.bitrate_samples[-1][1]
+                    or current_bitrate_counts[2] < self.bitrate_samples[-1][2]
+                )
+            ):
+                # A restarted pipeline resets cumulative counters. Rebuild the
+                # window rather than reporting a negative or misleading rate.
+                self.bitrate_samples.clear()
+            self.bitrate_samples.append(current_bitrate_counts)
+            cutoff = now - BITRATE_WINDOW_SECONDS
+            while (
+                len(self.bitrate_samples) >= 3
+                and self.bitrate_samples[1][0] <= cutoff
+            ):
+                self.bitrate_samples.popleft()
+            bitrate_start = self.bitrate_samples[0]
+            bitrate_elapsed = now - bitrate_start[0]
+            bitrate_window_ready = bitrate_elapsed >= BITRATE_WINDOW_SECONDS
+            if bitrate_window_ready:
+                self.rates["mux_kbps"] = (
+                    (self.counts["mux_bytes"] - bitrate_start[1])
+                    * 8 / bitrate_elapsed / 1000
+                )
+                self.rates["sent_kbps"] = (
+                    (self.counts["sent_bytes"] - bitrate_start[2])
+                    * 8 / bitrate_elapsed / 1000
+                )
             sent_age = None if not self.last_sent_at else now - self.last_sent_at
             send_queue_ns, send_queue_bytes = self._send_queue_levels()
             elapsed = now - self.rate_sample_at
@@ -524,22 +564,14 @@ class Output:
                     "audio_buffers_per_second": (
                         self.counts["audio"] - self.rate_sample_counts["audio"]
                     ) / elapsed,
-                    "mux_kbps": (
-                        (self.counts["mux_bytes"] - self.rate_sample_counts["mux_bytes"])
-                        * 8 / elapsed / 1000
-                    ),
-                    "sent_kbps": (
-                        (self.counts["sent_bytes"] - self.rate_sample_counts["sent_bytes"])
-                        * 8 / elapsed / 1000
-                    ),
+                    "mux_kbps": self.rates.get("mux_kbps", 0.0),
+                    "sent_kbps": self.rates.get("sent_kbps", 0.0),
                 }
                 self.rate_sample_at = now
                 self.rate_sample_counts = {
                     "composed": self.counts["composed"],
                     "video": self.counts["video"],
                     "audio": self.counts["audio"],
-                    "mux_bytes": self.counts["mux_bytes"],
-                    "sent_bytes": self.counts["sent_bytes"],
                 }
                 self.source_rates = {
                     name: (count - self.source_rate_sample_counts[name]) / elapsed
@@ -558,6 +590,9 @@ class Output:
                 ) / elapsed
                 self.timecode_rate_sample_count = self.timecode_updates
             expected_fps = rate_as_float(self.args.rate)
+            source_lateness_fail_ns = (
+                COMPOSITOR_LATENCY_NS + round(1_000_000_000 / expected_fps)
+            )
             minimum_video_fps = expected_fps * 0.90
             minimum_source_fps = expected_fps * 0.80
             minimum_audio_buffers_per_second = (
@@ -571,14 +606,19 @@ class Output:
                     self.rates["audio_buffers_per_second"] >= minimum_audio_buffers_per_second
                 ),
                 "mux_fresh": mux_age is not None and mux_age < 5.0,
-                "mux_bitrate": self.rates["mux_kbps"] >= minimum_mux_kbps,
+                "mux_bitrate": (
+                    bitrate_window_ready and self.rates["mux_kbps"] >= minimum_mux_kbps
+                ),
                 "destination_fresh": sent_age is not None and sent_age < 5.0,
-                "destination_bitrate": self.rates.get("sent_kbps", 0.0) >= minimum_mux_kbps,
+                "destination_bitrate": (
+                    bitrate_window_ready
+                    and self.rates.get("sent_kbps", 0.0) >= minimum_mux_kbps
+                ),
                 "send_queue_not_backlogged": (
                     send_queue_ns is not None and send_queue_ns < SEND_QUEUE_READY_NS
                 ),
                 "sources_within_compositor_budget": all(
-                    lateness * 1_000_000 <= SOURCE_LATENESS_READY_NS
+                    lateness * 1_000_000 <= source_lateness_fail_ns
                     for lateness in self.source_lateness_ms.values()
                 ),
                 "all_sources_advancing": all(
@@ -592,6 +632,12 @@ class Output:
                 "no_active_error": self.last_error is None,
             }
             failed_checks = [name for name, passed in checks.items() if not passed]
+            warnings = []
+            if any(
+                lateness * 1_000_000 > SOURCE_LATENESS_WARN_NS
+                for lateness in self.source_lateness_ms.values()
+            ):
+                warnings.append("source_lateness_elevated")
             ready = not failed_checks
             return {
                 "name": "program-rtmps-output", "kind": "output",
@@ -599,6 +645,7 @@ class Output:
                 "ready": ready, "revision": self.revision,
                 "health_checks": checks,
                 "failed_checks": failed_checks,
+                "warnings": warnings,
                 "reconnects": self.reconnects, "last_error": self.last_error,
                 "uptime_seconds": round(now - self.started_at, 3),
                 "metrics": {
@@ -628,7 +675,12 @@ class Output:
                     ),
                     "send_queue_level_bytes": send_queue_bytes,
                     "send_queue_ready_ms": SEND_QUEUE_READY_NS / 1_000_000,
-                    "source_lateness_ready_ms": SOURCE_LATENESS_READY_NS / 1_000_000,
+                    "source_lateness_warn_ms": SOURCE_LATENESS_WARN_NS / 1_000_000,
+                    "source_lateness_fail_ms": round(
+                        source_lateness_fail_ns / 1_000_000, 3
+                    ),
+                    "bitrate_window_seconds": round(bitrate_elapsed, 3),
+                    "bitrate_window_required_seconds": BITRATE_WINDOW_SECONDS,
                     "minimum_video_fps": round(minimum_video_fps, 3),
                     "minimum_source_fps": round(minimum_source_fps, 3),
                     "minimum_audio_buffers_per_second": round(

@@ -11,8 +11,11 @@ assert SPEC and SPEC.loader
 SPEC.loader.exec_module(gate)
 
 
-def sample(ready=True, failed=None, source_fps=29.97, mux_kbps=30000, reconnects=0):
-    return {
+def sample(
+    ready=True, failed=None, source_fps=29.97, mux_kbps=30000,
+    reconnects=0, elapsed=None, rss_mib=768.0,
+):
+    result = {
         "source_count": 8,
         "output": {
             "ready": ready,
@@ -28,11 +31,14 @@ def sample(ready=True, failed=None, source_fps=29.97, mux_kbps=30000, reconnects
                 "source_lateness_max_ms": 42.0,
                 "send_queue_level_ms": 120.0,
                 "process_cpu_cores": 12.25,
-                "process_rss_mib": 768.0,
+                "process_rss_mib": rss_mib,
                 "source_fps": {f"source_{index}": source_fps for index in range(8)},
             },
         },
     }
+    if elapsed is not None:
+        result["_sample_elapsed_seconds"] = elapsed
+    return result
 
 
 class YouTubeDemoGateTests(unittest.TestCase):
@@ -66,6 +72,27 @@ class YouTubeDemoGateTests(unittest.TestCase):
         result = gate.summarize([sample(reconnects=1)], 8)
         self.assertFalse(result["passed"])
         self.assertEqual(result["reconnects_max"], 1)
+
+    def test_long_gate_rejects_unbounded_post_warmup_rss_growth(self):
+        result = gate.summarize([
+            sample(elapsed=0, rss_mib=700),
+            sample(elapsed=300, rss_mib=760),
+            sample(elapsed=900, rss_mib=860),
+            sample(elapsed=1500, rss_mib=960),
+        ], 8, 1500)
+        self.assertFalse(result["passed"])
+        self.assertTrue(result["rss_slope_check_applied"])
+        self.assertEqual(result["rss_growth_mib_per_hour"], 600.0)
+        self.assertIn("process_rss_growth", result["failed_checks"])
+
+    def test_short_gate_reports_but_does_not_apply_rss_slope(self):
+        result = gate.summarize([
+            sample(elapsed=0, rss_mib=700),
+            sample(elapsed=30, rss_mib=710),
+        ], 8, 30)
+        self.assertTrue(result["passed"])
+        self.assertFalse(result["rss_slope_check_applied"])
+        self.assertIsNone(result["rss_growth_mib_per_hour"])
 
     def test_controller_url_is_loopback_only(self):
         self.assertEqual(

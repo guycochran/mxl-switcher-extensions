@@ -88,10 +88,13 @@ Health is loopback-only on port 18120. A green readiness response requires
 all selected source branches to advance, encoded video near the requested
 cadence, encoded AAC frames at no less than 90% of the Program sample rate's
 frame cadence (46.875 frames/s at 48 kHz), fresh mux output and actual RTMP-sink bytes at
-no less than 70% of the requested video bitrate, and (for eight-up) the
+no less than 70% of the requested video bitrate over a four-second rolling
+window, and (for eight-up) the
 diagnostic-tile clock to advance at the requested cadence while encoded-video
 cadence independently proves the composed output. Source
-lateness must remain inside the compositor's 90 ms readiness budget. A reconnect remains visible
+lateness above 90 ms is reported as an early warning; readiness fails only
+after the configured 100 ms compositor latency plus one frame interval
+(approximately 133.4 ms at 30000/1001). A reconnect remains visible
 in telemetry even after the pipeline recovers. A two-frame downstream-leaky
 queue between the compositor and encoder prevents a slow encoder from building
 an ever-older backlog; it sheds stale frames and makes the cadence gate fail
@@ -121,6 +124,20 @@ audio falls below 90% of its expected AAC frame cadence, the send queue reaches
 500 ms, mux output goes stale, or a reconnect occurs. Its JSON records the
 worst source lateness and send-queue level so a failed run can be localized.
 It never reads or prints the stream key.
+
+For a long qualification, the same gate ignores the first five minutes of
+normal allocation and then fails if the least-squares RSS trend exceeds 128
+MiB/hour (a projected 1 GiB over eight hours). The threshold is intentionally
+conservative and can be made stricter for a release gate:
+
+```bash
+python3 scripts/check_youtube_demo.py \
+  --url http://127.0.0.1:18121 \
+  --required-sources 8 \
+  --seconds 28800 \
+  --rss-warmup-seconds 300 \
+  --max-rss-growth-mib-per-hour 128
+```
 
 ### Audience proof capture
 
