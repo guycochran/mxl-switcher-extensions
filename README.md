@@ -64,7 +64,10 @@ Stopping, restarting, or failing one extension must not interrupt Core or
 another extension.
 
 See [extension contract](docs/EXTENSION_CONTRACT.md) and
-[broadcast-readiness plan](docs/BROADCAST_READINESS.md), plus
+[broadcast-readiness plan](docs/BROADCAST_READINESS.md). The
+[deployment architecture decision](docs/DEPLOYMENT_ARCHITECTURE.md) defines the
+supported single-host default, the MXL 1.1 distributed preview, and the gates
+required before promoting a multi-host profile. Also see
 [Core's output-node architecture](https://github.com/guycochran/mxl-switcher-core/blob/main/docs/OUTPUT_ARCHITECTURE.md).
 
 ## Current starting point
@@ -102,6 +105,14 @@ requires rate-qualified wire-level A/V proof,
 preventing an incompatible, stalled, or presence-only path from appearing
 healthy. The package remains below candidate maturity until content-level A/V
 timing and flow-replacement recovery gates pass.
+
+The [NDI Input Module](inputs/ndi) is now an independently supervised
+prototype. It receives one NDI source per instance, normalizes cadence before
+scaling and threaded v210 conversion, publishes optional Float32/48 kHz audio,
+and exposes the common loopback health contract. Its offline pipeline,
+validation, and bounded-restart tests pass. It remains below candidate maturity
+until the timestamp A/B, two-camera moving-picture, recovery, audio, and staged
+endurance gates in its delivery plan pass on real senders.
 
 The [YouTube RTMPS output](outputs/rtmp) is a working 4K prototype with direct
 four- or eight-source MXL composition, CPU and optional NVENC profiles, a

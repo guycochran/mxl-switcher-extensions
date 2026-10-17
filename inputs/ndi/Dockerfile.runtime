@@ -1,0 +1,9 @@
+# syntax=docker/dockerfile:1
+ARG BASE_IMAGE=mxl-lab:latest
+FROM ${BASE_IMAGE}
+
+WORKDIR /opt/mxl-switcher-extensions
+COPY common ./common
+COPY inputs/ndi/ndi_input.py ./inputs/ndi/ndi_input.py
+
+ENTRYPOINT ["python3", "/opt/mxl-switcher-extensions/inputs/ndi/ndi_input.py"]
