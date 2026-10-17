@@ -74,9 +74,10 @@ cadence. Use the qualification gates in [PLAN.md](PLAN.md) before promotion.
 
 ## Timestamp selection
 
-The module exposes `receive-time`, `timestamp`, and `timecode`. No mode is
-claimed as universally correct. Run the one-camera A/B gate and select the mode
-that produces the lowest Core held-frame ratio for the actual sender.
+The module exposes `receive-time`, `timestamp`, `timecode`, and the NDI
+plugin's clock-paced `clocked` mode. No mode is claimed as universally correct.
+Run the one-camera A/B gate and select the mode that produces the lowest Core
+held-frame ratio for the actual sender.
 
 ## Safety
 

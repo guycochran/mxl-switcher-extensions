@@ -73,6 +73,9 @@ class CommandTests(unittest.TestCase):
         self.assertFalse(any(value.startswith("ndi-name=") for value in argv))
         self.assertIn("video/x-raw,framerate=30000/1001", argv)
 
+    def test_clocked_timestamp_mode_is_explicitly_supported(self):
+        self.assertIn("timestamp-mode=clocked", command(timestamp_mode="clocked"))
+
     def test_optional_audio_is_normalized_and_disabled_audio_is_absent(self):
         argv = command(audio_channels=8)
         self.assertIn("audioresample", argv)

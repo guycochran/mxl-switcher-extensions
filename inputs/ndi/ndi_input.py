@@ -29,7 +29,7 @@ AUDIO_QUEUE_NS = 200_000_000
 AUDIO_RATE = 48_000
 FLOW_ACTIVE_SECONDS = 60.0
 ALLOWED_CHANNELS = (1, 2, 4, 8)
-TIMESTAMP_MODES = ("receive-time", "timestamp", "timecode")
+TIMESTAMP_MODES = ("receive-time", "timestamp", "timecode", "clocked")
 REQUIRED_PLUGINS = (
     "ndisrc", "ndisrcdemux", "queue", "videorate", "videoscale",
     "videoconvert", "audioconvert", "audioresample", "audiorate", "mxlsink",
