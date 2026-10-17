@@ -64,7 +64,10 @@ Stopping, restarting, or failing one extension must not interrupt Core or
 another extension.
 
 See [extension contract](docs/EXTENSION_CONTRACT.md) and
-[broadcast-readiness plan](docs/BROADCAST_READINESS.md), plus
+[broadcast-readiness plan](docs/BROADCAST_READINESS.md). The
+[deployment architecture decision](docs/DEPLOYMENT_ARCHITECTURE.md) defines the
+supported single-host default, the MXL 1.1 distributed preview, and the gates
+required before promoting a multi-host profile. Also see
 [Core's output-node architecture](https://github.com/guycochran/mxl-switcher-core/blob/main/docs/OUTPUT_ARCHITECTURE.md).
 
 ## Current starting point
