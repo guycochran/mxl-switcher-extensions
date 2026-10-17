@@ -42,6 +42,22 @@ class YouTubeControlTests(unittest.TestCase):
             found = control.discover_zoomiso_video(pathlib.Path(directory), active_seconds=5)
             self.assertEqual([item.flow_id for item in found], ["flow-1a", "flow-2"])
 
+    def test_default_window_survives_mmap_writeback_mtime_lag(self):
+        # Shared-mmap writers only refresh mtime on kernel writeback, so a live
+        # flow's mtime age reaches 30-35 s under Ubuntu defaults.
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            self.make_flow(directory, "video-lagging", 1, "device-a", age=34)
+            self.make_flow(directory, "video-dead", 2, "device-a", age=90)
+            self.make_audio_flow(directory, "audio-lagging", age=34, output=1, device="device-a")
+            self.make_audio_flow(directory, "audio-dead", age=90, output=2, device="device-a")
+            found = control.discover_zoomiso_video(root)
+            self.assertEqual([item.flow_id for item in found], ["video-lagging"])
+            self.assertTrue(control.audio_flow_active(root, "audio-lagging"))
+            self.assertFalse(control.audio_flow_active(root, "audio-dead"))
+            sources = [control.Input("ZOOM 1", "video-lagging"), control.Input("ZOOM 2", "video-dead")]
+            self.assertEqual(control.discover_paired_audio(root, sources), ["audio-lagging"])
+
     def make_audio_flow(
         self, root, flow_id, media_type="audio/float32", age=0,
         output=None, device="audio-device",
@@ -186,7 +202,8 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertEqual(args.port, 18121)
         self.assertFalse(args.container_bind)
         self.assertEqual(args.source_count, 4)
-        self.assertEqual(args.active_seconds, 30.0)
+        self.assertEqual(args.active_seconds, control.FLOW_ACTIVE_SECONDS)
+        self.assertEqual(control.FLOW_ACTIVE_SECONDS, 60.0)
         self.assertEqual(args.audio_rate_hz, 48000)
         self.assertEqual(args.rate, "30000/1001")
         self.assertEqual(args.video_encoder, "x264enc")

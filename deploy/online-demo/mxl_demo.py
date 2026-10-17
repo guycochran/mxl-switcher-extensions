@@ -35,6 +35,15 @@ OWNER_LABEL = "io.github.guycochran.mxl-online-demo.deployment"
 # window must span several lines or "frames advanced" and "live" are stale.
 CONFIDENCE_STATS_EVERY_S = 5
 MIN_ACCEPTANCE_SECONDS = 3 * CONFIDENCE_STATS_EVERY_S
+# A flow counts as live when its ``data`` file was modified within this window.
+# Writers update ``data`` through a shared mmap, so the kernel refreshes its
+# mtime only when the dirty page is written back. With Ubuntu defaults
+# (vm.dirty_expire_centisecs=3000, vm.dirty_writeback_centisecs=500) the
+# observed mtime age of a healthy flow climbs to 30-35 s before resetting, so a
+# 30 s window briefly marks every source stale. 60 s leaves a clear margin.
+# A future check could confirm liveness from the advancing head index instead,
+# which needs the MXL SDK.
+FLOW_ACTIVE_SECONDS = 60.0
 HARD_COUNTERS = (
     "invalid", "too_early", "too_late", "timeouts", "reader_reopens",
     "sync_timeouts", "sync_too_early", "sync_too_late", "no_common_window",
@@ -331,7 +340,7 @@ def container_owner(cfg: dict, name: str) -> str | None:
     return proc.stdout.strip() if proc.returncode == 0 else None
 
 
-def discover(cfg: dict, active_seconds: float = 30.0) -> list[dict]:
+def discover(cfg: dict, active_seconds: float = FLOW_ACTIVE_SECONDS) -> list[dict]:
     domain = pathlib.Path(validate_domain_binding(cfg))
     if not readable_dir(domain):
         raise RuntimeError(f"MXL domain is not readable: {domain}; {ACCOUNT_HINT}")
