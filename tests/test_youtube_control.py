@@ -184,6 +184,8 @@ class YouTubeControlTests(unittest.TestCase):
         self.assertIn("send queue ms", body)
         self.assertIn("source late ms", body)
         self.assertIn("all demo gates passing", body)
+        self.assertIn(".dot.warn", body)
+        self.assertIn("warnings.map(prettyCheck)", body)
 
     def test_discovery_can_pin_an_instance_by_flow_identity(self):
         with tempfile.TemporaryDirectory() as directory:

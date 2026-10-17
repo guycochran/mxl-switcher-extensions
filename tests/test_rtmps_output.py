@@ -149,16 +149,16 @@ class RTMPSOutputTests(unittest.TestCase):
         with mock.patch.object(rtmps.time, "monotonic", return_value=100.0):
             output = rtmps.Output(args, "abc-def")
         output.state = "streaming"
-        output.last_mux_at = 101.9
-        output.counts.update(composed=60, video=60, audio=100, mux_buffers=60, mux_bytes=7_500_000)
-        output.source_counts = {name: 60 for name in output.source_counts}
+        output.last_mux_at = 103.9
+        output.counts.update(composed=120, video=120, audio=200, mux_buffers=120, mux_bytes=15_000_000)
+        output.source_counts = {name: 120 for name in output.source_counts}
         output.source_lateness_window_ns = {
             name: 42_000_000 for name in output.source_counts
         }
-        output.timecode_updates = 60
-        with mock.patch.object(output, "_sink_bytes", return_value=7_500_000), \
+        output.timecode_updates = 120
+        with mock.patch.object(output, "_sink_bytes", return_value=15_000_000), \
              mock.patch.object(output, "_send_queue_levels", return_value=(0, 0)), \
-             mock.patch.object(rtmps.time, "monotonic", return_value=102.0):
+             mock.patch.object(rtmps.time, "monotonic", return_value=104.0):
             snapshot = output.snapshot()
         self.assertTrue(snapshot["ready"])
         self.assertEqual(snapshot["failed_checks"], [])
@@ -168,18 +168,18 @@ class RTMPSOutputTests(unittest.TestCase):
         self.assertEqual(snapshot["metrics"]["source_lateness_max_ms"], 42.0)
         self.assertTrue(all(rate == 30.0 for rate in snapshot["metrics"]["source_fps"].values()))
 
-        output.source_counts["source_4"] = 60
+        output.source_counts["source_4"] = 120
         output.counts.update(
-            composed=120, video=120, audio=200, mux_buffers=120, mux_bytes=15_000_000
+            composed=240, video=240, audio=400, mux_buffers=240, mux_bytes=30_000_000
         )
-        output.timecode_updates = 120
-        output.last_mux_at = 103.9
+        output.timecode_updates = 240
+        output.last_mux_at = 107.9
         for name in output.source_counts:
             if name != "source_4":
-                output.source_counts[name] = 120
-        with mock.patch.object(output, "_sink_bytes", return_value=15_000_000), \
+                output.source_counts[name] = 240
+        with mock.patch.object(output, "_sink_bytes", return_value=30_000_000), \
              mock.patch.object(output, "_send_queue_levels", return_value=(0, 0)), \
-             mock.patch.object(rtmps.time, "monotonic", return_value=104.0):
+             mock.patch.object(rtmps.time, "monotonic", return_value=108.0):
             snapshot = output.snapshot()
         self.assertFalse(snapshot["ready"])
         self.assertIn("all_sources_advancing", snapshot["failed_checks"])
@@ -191,11 +191,11 @@ class RTMPSOutputTests(unittest.TestCase):
         with mock.patch.object(rtmps.time, "monotonic", return_value=200.0):
             output = rtmps.Output(args, "abc-def")
         output.state = "streaming"
-        output.last_mux_at = 201.9
-        output.counts.update(composed=60, video=60, audio=100, mux_buffers=60, mux_bytes=250_000)
-        output.source_counts = {name: 60 for name in output.source_counts}
-        with mock.patch.object(output, "_sink_bytes", return_value=250_000), \
-             mock.patch.object(rtmps.time, "monotonic", return_value=202.0):
+        output.last_mux_at = 203.9
+        output.counts.update(composed=120, video=120, audio=200, mux_buffers=120, mux_bytes=500_000)
+        output.source_counts = {name: 120 for name in output.source_counts}
+        with mock.patch.object(output, "_sink_bytes", return_value=500_000), \
+             mock.patch.object(rtmps.time, "monotonic", return_value=204.0):
             snapshot = output.snapshot()
         self.assertFalse(snapshot["ready"])
         self.assertIn("mux_bitrate", snapshot["failed_checks"])
@@ -203,41 +203,86 @@ class RTMPSOutputTests(unittest.TestCase):
         self.assertIn("diagnostic_clock_advancing", snapshot["failed_checks"])
         self.assertIn("send_queue_not_backlogged", snapshot["failed_checks"])
 
+    def test_bitrate_readiness_uses_four_second_window_across_keyframe_bursts(self):
+        args = self.args()
+        args.video_flow = None
+        args.input = [rtmps.Input(f"SOURCE {i + 1}", f"flow-{i + 1}") for i in range(8)]
+        with mock.patch.object(rtmps.time, "monotonic", return_value=600.0):
+            output = rtmps.Output(args, "abc-def")
+        output.state = "streaming"
+        # The one-second increments alternate below and above the 21 Mbps
+        # threshold, while the real four-second transport rate is 30 Mbps.
+        cumulative_bytes = (1_000_000, 7_500_000, 8_500_000, 15_000_000)
+        for second, total_bytes in enumerate(cumulative_bytes, 1):
+            output.last_mux_at = 600.0 + second - 0.1
+            output.counts.update(
+                composed=30 * second,
+                video=30 * second,
+                audio=47 * second,
+                mux_buffers=30 * second,
+                mux_bytes=total_bytes,
+            )
+            output.source_counts = {
+                name: 30 * second for name in output.source_counts
+            }
+            output.timecode_updates = 30 * second
+            with mock.patch.object(output, "_sink_bytes", return_value=total_bytes), \
+                 mock.patch.object(output, "_send_queue_levels", return_value=(0, 0)), \
+                 mock.patch.object(
+                     rtmps.time, "monotonic", return_value=600.0 + second
+                 ):
+                snapshot = output.snapshot()
+        self.assertTrue(snapshot["ready"])
+        self.assertAlmostEqual(snapshot["metrics"]["mux_kbps"], 30000.0)
+        self.assertEqual(snapshot["metrics"]["bitrate_window_seconds"], 4.0)
+
     def test_readiness_rejects_send_queue_backlog(self):
         args = self.args()
         with mock.patch.object(rtmps.time, "monotonic", return_value=400.0):
             output = rtmps.Output(args, "abc-def")
         output.state = "streaming"
-        output.last_mux_at = 401.9
-        output.counts.update(composed=60, video=60, audio=94, mux_bytes=7_500_000)
-        with mock.patch.object(output, "_sink_bytes", return_value=7_500_000), \
+        output.last_mux_at = 403.9
+        output.counts.update(composed=120, video=120, audio=188, mux_bytes=15_000_000)
+        with mock.patch.object(output, "_sink_bytes", return_value=15_000_000), \
              mock.patch.object(
                  output, "_send_queue_levels", return_value=(600_000_000, 2_000_000)
              ), \
-             mock.patch.object(rtmps.time, "monotonic", return_value=402.0):
+             mock.patch.object(rtmps.time, "monotonic", return_value=404.0):
             snapshot = output.snapshot()
         self.assertFalse(snapshot["ready"])
         self.assertIn("send_queue_not_backlogged", snapshot["failed_checks"])
         self.assertEqual(snapshot["metrics"]["send_queue_level_ms"], 600.0)
 
-    def test_readiness_rejects_source_outside_compositor_budget(self):
+    def test_lateness_warns_at_90_ms_and_fails_at_real_compositor_deadline(self):
         args = self.args()
         args.video_flow = None
         args.input = [rtmps.Input("SOURCE 1", "flow-1")]
         with mock.patch.object(rtmps.time, "monotonic", return_value=500.0):
             output = rtmps.Output(args, "abc-def")
         output.state = "streaming"
-        output.last_mux_at = 501.9
-        output.counts.update(composed=60, video=60, audio=94, mux_bytes=7_500_000)
-        output.source_counts["source_0"] = 60
+        output.last_mux_at = 503.9
+        output.counts.update(composed=120, video=120, audio=188, mux_bytes=15_000_000)
+        output.source_counts["source_0"] = 120
         output.source_lateness_window_ns["source_0"] = 95_000_000
-        with mock.patch.object(output, "_sink_bytes", return_value=7_500_000), \
+        with mock.patch.object(output, "_sink_bytes", return_value=15_000_000), \
              mock.patch.object(output, "_send_queue_levels", return_value=(0, 0)), \
-             mock.patch.object(rtmps.time, "monotonic", return_value=502.0):
+             mock.patch.object(rtmps.time, "monotonic", return_value=504.0):
+            snapshot = output.snapshot()
+        self.assertTrue(snapshot["ready"])
+        self.assertEqual(snapshot["warnings"], ["source_lateness_elevated"])
+        self.assertEqual(snapshot["metrics"]["source_lateness_max_ms"], 95.0)
+        self.assertAlmostEqual(snapshot["metrics"]["source_lateness_fail_ms"], 133.333)
+
+        output.last_mux_at = 507.9
+        output.counts.update(composed=240, video=240, audio=376, mux_bytes=30_000_000)
+        output.source_counts["source_0"] = 240
+        output.source_lateness_window_ns["source_0"] = 140_000_000
+        with mock.patch.object(output, "_sink_bytes", return_value=30_000_000), \
+             mock.patch.object(output, "_send_queue_levels", return_value=(0, 0)), \
+             mock.patch.object(rtmps.time, "monotonic", return_value=508.0):
             snapshot = output.snapshot()
         self.assertFalse(snapshot["ready"])
         self.assertIn("sources_within_compositor_budget", snapshot["failed_checks"])
-        self.assertEqual(snapshot["metrics"]["source_lateness_max_ms"], 95.0)
 
     def test_readiness_requires_audio_at_aac_frame_cadence(self):
         args = self.args()
