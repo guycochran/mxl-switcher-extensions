@@ -14,6 +14,11 @@ SPEC = importlib.util.spec_from_file_location("ndi_input", MODULE_PATH)
 ndi = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(ndi)
+PIPELINE_PATH = ROOT / "inputs" / "ndi" / "ndi_pipeline.py"
+PIPELINE_SPEC = importlib.util.spec_from_file_location("ndi_pipeline", PIPELINE_PATH)
+pipeline_runner = importlib.util.module_from_spec(PIPELINE_SPEC)
+assert PIPELINE_SPEC.loader is not None
+PIPELINE_SPEC.loader.exec_module(pipeline_runner)
 
 
 class FakeProcess:
@@ -49,6 +54,11 @@ def command(**overrides):
 
 
 class CommandTests(unittest.TestCase):
+    def test_pipeline_description_quotes_untrusted_property_values(self):
+        value = 'CAMERA ! fakesrc name="bad"'
+        rendered = pipeline_runner.description(["ndisrc", f"ndi-name={value}", "!", "fakesink"])
+        self.assertEqual(rendered, 'ndisrc ndi-name="CAMERA ! fakesrc name=\\"bad\\"" ! fakesink')
+
     def test_normalizes_rate_before_scale_and_threaded_conversion(self):
         argv = command()
         rate = argv.index("videorate")
@@ -194,6 +204,9 @@ class LifecycleTests(unittest.TestCase):
 
     def test_optional_audio_does_not_block_video_readiness(self):
         self.module.start()
+        self.assertTrue(self.processes[-1].argv[1].endswith("ndi_pipeline.py"))
+        self.assertEqual(self.processes[-1].argv[2], "--")
+        self.assertNotIn("gst-launch-1.0", self.processes[-1].argv)
         self.assertEqual(self.module.check(), "wait")
         self.flow("video", "video/v210")
         self.assertEqual(self.module.check(), "healthy")

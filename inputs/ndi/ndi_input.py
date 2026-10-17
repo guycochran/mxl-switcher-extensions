@@ -225,6 +225,7 @@ class NDIInput:
             "rate_mode": self.args.rate_mode,
             "timestamp_mode": self.args.timestamp_mode,
             "pacing_mode": self.args.pacing_mode,
+            "pipeline_clock": "system",
             "convert_threads": self.args.convert_threads,
             "audio_rate_hz": AUDIO_RATE,
             "audio_channels": self.args.audio_channels,
@@ -267,6 +268,12 @@ class NDIInput:
                 convert_threads=self.args.convert_threads,
                 audio_channels=self.args.audio_channels,
             )
+            command = [
+                sys.executable,
+                str(pathlib.Path(__file__).with_name("ndi_pipeline.py")),
+                "--",
+                *command[3:],
+            ]
             try:
                 self.process = self.popen(
                     command,
