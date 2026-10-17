@@ -26,6 +26,9 @@ download. Before using another tag, read the exact
 and [base-image contract](deploy/online-demo/BASE_IMAGE.md). The onboarding
 guide defines what the operator must obtain and stage; `preflight` checks the
 image contract inside the image before it permits a build or launch.
+For cloud deployment, use the tested Azure reference or the Google Cloud and
+AWS candidates in the [cross-cloud host sizing
+guide](deploy/online-demo/CLOUD_SIZING.md).
 
 ## 1. Clone and initialize
 

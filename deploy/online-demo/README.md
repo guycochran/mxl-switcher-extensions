@@ -98,6 +98,9 @@ operator-supplied prerequisite with a machine-checked
 The [prerequisite onboarding guide](PREREQUISITES.md) covers the
 authorized-image, ZoomISO, host, security, and cloud handoff steps that must be
 complete before this launcher takes control.
+The [cross-cloud sizing guide](CLOUD_SIZING.md) names the Azure reference and
+the comparable Google Cloud and AWS candidates, with one common acceptance
+checklist for qualifying them.
 
 `acceptance` is a read-only observation gate for a running deployment. It
 captures two snapshots, requires every owned service to remain running with

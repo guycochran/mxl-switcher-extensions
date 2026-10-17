@@ -31,6 +31,10 @@ does not span hosts. The demonstrated eight-source CPU profile used 32 modern
 logical CPUs and 128 GiB RAM. A four-source rehearsal can start smaller, but a
 host at sustained CPU saturation is not a valid acceptance result.
 
+For equivalent Azure, Google Cloud, and AWS instance recommendations and the
+provider-neutral qualification procedure, see the [cross-cloud host sizing
+guide](CLOUD_SIZING.md).
+
 Install Docker Engine, Git, and Python 3 using the operating system or cloud
 provider's supported method. Give the intended operator account stable Docker
 access and read access to the selected MXL domain. Do not make Docker's storage
@@ -153,3 +157,5 @@ on that host. That is
 portability guidance, not an AWS or Google Cloud acceptance claim. Repeat
 `preflight`, the 30-second gate, the audience check, cleanup, and provider-level
 deallocation on each new platform before describing it as qualified.
+Use the exact candidates and common evidence checklist in
+[CLOUD_SIZING.md](CLOUD_SIZING.md) so the results remain comparable.
