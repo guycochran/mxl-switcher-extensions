@@ -44,8 +44,20 @@ def main(argv: list[str] | None = None) -> int:
     pipeline = Gst.parse_launch(description(args.pipeline))
     pipeline.use_clock(Gst.SystemClock.obtain())
 
-    gates = [element for element in pipeline.iterate_elements()
-             if element.get_name().startswith("startup_gate_")]
+    gates = []
+    iterator = pipeline.iterate_elements()
+    while True:
+        result, element = iterator.next()
+        if result == Gst.IteratorResult.OK:
+            if element.get_name().startswith("startup_gate_"):
+                gates.append(element)
+        elif result == Gst.IteratorResult.RESYNC:
+            iterator.resync()
+            gates.clear()
+        elif result == Gst.IteratorResult.DONE:
+            break
+        else:
+            raise RuntimeError("could not enumerate pipeline elements")
     if gates:
         ready: set[str] = set()
         ready_lock = threading.Lock()
