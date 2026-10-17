@@ -76,7 +76,12 @@ class NDIBank:
                 startup_gate=True,
             )
             tokens.extend(command[3:])
-        return [sys.executable, str(pathlib.Path(__file__).with_name("ndi_pipeline.py")), "--", *tokens]
+        return [
+            sys.executable, str(pathlib.Path(__file__).with_name("ndi_pipeline.py")),
+            "--rate-numerator", str(self.args.rate_numerator),
+            "--rate-denominator", str(self.args.rate_denominator),
+            "--", *tokens,
+        ]
 
     def start(self, *, restart=False) -> None:
         with self.lock:

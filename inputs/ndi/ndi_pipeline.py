@@ -33,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     from gi.repository import Gst
 
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--rate-numerator", type=int, default=30)
+    parser.add_argument("--rate-denominator", type=int, default=1)
     parser.add_argument("pipeline", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.pipeline[:1] == ["--"]:
@@ -45,15 +47,19 @@ def main(argv: list[str] | None = None) -> int:
     pipeline.use_clock(Gst.SystemClock.obtain())
 
     gates = []
+    clock_syncs = []
     iterator = pipeline.iterate_elements()
     while True:
         result, element = iterator.next()
         if result == Gst.IteratorResult.OK:
             if element.get_name().startswith("startup_gate_"):
                 gates.append(element)
+            elif element.get_name().startswith("clock_sync_"):
+                clock_syncs.append(element)
         elif result == Gst.IteratorResult.RESYNC:
             iterator.resync()
             gates.clear()
+            clock_syncs.clear()
         elif result == Gst.IteratorResult.DONE:
             break
         else:
@@ -64,6 +70,17 @@ def main(argv: list[str] | None = None) -> int:
         opened = threading.Event()
 
         def open_all() -> None:
+            # All bank branches start their fixed-cadence timeline on one
+            # pipeline-clock boundary.  Per-branch sync-to-first offsets would
+            # preserve each receiver's arbitrary arrival phase.
+            clock = pipeline.get_clock()
+            running_time = clock.get_time() - pipeline.get_base_time()
+            frame_duration = Gst.util_uint64_scale(
+                args.rate_denominator, Gst.SECOND, args.rate_numerator
+            )
+            shared_offset = running_time + 2 * frame_duration
+            for clock_sync in clock_syncs:
+                clock_sync.set_property("ts-offset", shared_offset)
             for gate in gates:
                 gate.set_property("drop", False)
             opened.set()

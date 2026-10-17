@@ -39,6 +39,11 @@ class BankTests(unittest.TestCase):
         self.assertIn("demux0.video", command); self.assertIn("demux1.video", command)
         self.assertIn("name=startup_gate_demux0", command)
         self.assertIn("name=startup_gate_demux1", command)
+        self.assertIn("name=clock_sync_demux0", command)
+        self.assertIn("name=clock_sync_demux1", command)
+        self.assertEqual(command.count("sync-to-first=false"), 2)
+        self.assertIn("--rate-numerator", command)
+        self.assertIn("--rate-denominator", command)
         self.assertEqual(command.count("drop=true"), 2)
         self.assertNotIn("sh", command)
 

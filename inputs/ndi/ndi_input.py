@@ -147,7 +147,10 @@ def gst_command(
             "!",
         ])
     if pacing_mode in {"clock-sync", "retimestamp-clock-sync"}:
-        command.extend(["clocksync", "sync-to-first=true", "!"])
+        if startup_gate:
+            command.extend(["clocksync", f"name=clock_sync_{branch_name}", "sync-to-first=false", "!"])
+        else:
+            command.extend(["clocksync", "sync-to-first=true", "!"])
     command.extend(["mxlsink", f"flow-id={video_flow}", f"domain={domain}"])
     if audio_mode != "disabled":
         mask = hex((1 << audio_channels) - 1)
