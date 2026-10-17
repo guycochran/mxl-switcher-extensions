@@ -83,6 +83,14 @@ class CommandTests(unittest.TestCase):
         self.assertLess(argv.index("clocksync"), argv.index("mxlsink"))
         self.assertIn("sync-to-first=true", argv)
 
+    def test_deterministic_v210_retimestamp_precedes_clock_sync(self):
+        argv = command(pacing_mode="retimestamp-clock-sync")
+        self.assertLess(argv.index("videoconvert"), argv.index("identity"))
+        self.assertLess(argv.index("identity"), argv.index("clocksync"))
+        self.assertLess(argv.index("clocksync"), argv.index("mxlsink"))
+        self.assertIn("datarate=165888000", argv)
+        self.assertIn("single-segment=true", argv)
+
     def test_optional_audio_is_normalized_and_disabled_audio_is_absent(self):
         argv = command(audio_channels=8)
         self.assertIn("audioresample", argv)

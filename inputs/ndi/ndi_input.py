@@ -32,7 +32,7 @@ ALLOWED_CHANNELS = (1, 2, 4, 8)
 TIMESTAMP_MODES = ("receive-time", "timestamp", "timecode", "clocked")
 REQUIRED_PLUGINS = (
     "ndisrc", "ndisrcdemux", "queue", "videorate", "videoscale",
-    "videoconvert", "clocksync", "audioconvert", "audioresample", "audiorate", "mxlsink",
+    "videoconvert", "identity", "clocksync", "audioconvert", "audioresample", "audiorate", "mxlsink",
 )
 
 
@@ -46,6 +46,16 @@ def _fraction(numerator: int, denominator: int) -> str:
     if numerator <= 0 or denominator <= 0:
         raise ValueError("rate numerator and denominator must be positive")
     return f"{numerator}/{denominator}"
+
+
+def _v210_datarate(width: int, height: int, numerator: int, denominator: int) -> int:
+    """Return bytes/s for GStreamer's 128-byte-aligned v210 frame layout."""
+
+    stride = ((width + 47) // 48) * 128
+    value = round(stride * height * numerator / denominator)
+    if not 1 <= value <= 2_147_483_647:
+        raise ValueError("v210 data rate is outside GStreamer identity's supported range")
+    return value
 
 
 def gst_command(
@@ -82,7 +92,7 @@ def gst_command(
         raise ValueError("width and height must be positive")
     if timestamp_mode not in TIMESTAMP_MODES:
         raise ValueError("unknown timestamp mode")
-    if pacing_mode not in {"none", "clock-sync"}:
+    if pacing_mode not in {"none", "clock-sync", "retimestamp-clock-sync"}:
         raise ValueError("unknown pacing mode")
     if not 1 <= convert_threads <= 32:
         raise ValueError("convert threads must be between 1 and 32")
@@ -109,7 +119,14 @@ def gst_command(
         "videoconvert", f"n-threads={convert_threads}", "!",
         "video/x-raw,format=v210", "!",
     ]
-    if pacing_mode == "clock-sync":
+    if pacing_mode == "retimestamp-clock-sync":
+        command.extend([
+            "identity",
+            f"datarate={_v210_datarate(width, height, rate_numerator, rate_denominator)}",
+            "single-segment=true",
+            "!",
+        ])
+    if pacing_mode in {"clock-sync", "retimestamp-clock-sync"}:
         command.extend(["clocksync", "sync-to-first=true", "!"])
     command.extend(["mxlsink", f"flow-id={video_flow}", f"domain={domain}"])
     if audio_mode != "disabled":
@@ -331,7 +348,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="choose from measured sender behavior; no universal default is assumed",
     )
-    parser.add_argument("--pacing-mode", choices=("none", "clock-sync"), default="none")
+    parser.add_argument(
+        "--pacing-mode",
+        choices=("none", "clock-sync", "retimestamp-clock-sync"),
+        default="none",
+    )
     parser.add_argument("--convert-threads", type=int, default=4)
     parser.add_argument("--bind", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18130)

@@ -85,6 +85,12 @@ before the MXL writer so fixed-cadence buffers are committed on their PTS
 schedule rather than in upstream arrival bursts. It is opt-in until qualified;
 `none` preserves the unpaced path for comparison.
 
+`--pacing-mode retimestamp-clock-sync` additionally replaces incoming PTS with
+a deterministic timeline derived from the fixed-size v210 frame byte rate,
+then paces that timeline. This mode is intended for contribution sources whose
+timestamps cause MXL index skips or repeats; it must pass the live cadence gate
+before becoming a deployment default.
+
 ## Safety
 
 - The module never clears an MXL domain or removes flow directories.
