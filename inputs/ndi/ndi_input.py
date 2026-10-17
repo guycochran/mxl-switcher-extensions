@@ -25,6 +25,8 @@ from common.runtime import ExtensionRuntime, RestartBudget
 
 
 VIDEO_QUEUE_BUFFERS = 4
+BANK_VIDEO_QUEUE_BUFFERS = 12
+BANK_VIDEO_QUEUE_PREROLL = 6
 AUDIO_QUEUE_NS = 200_000_000
 AUDIO_RATE = 48_000
 FLOW_ACTIVE_SECONDS = 60.0
@@ -114,12 +116,16 @@ def gst_command(
         raise ValueError("invalid branch name")
     source.extend([f"timestamp-mode={timestamp_mode}", "!", "ndisrcdemux", f"name={branch_name}"])
 
+    queue_buffers = BANK_VIDEO_QUEUE_BUFFERS if startup_gate else VIDEO_QUEUE_BUFFERS
     command = [
         "gst-launch-1.0", "-e", "-q", *source,
         f"{branch_name}.video", "!",
-        "queue", f"max-size-buffers={VIDEO_QUEUE_BUFFERS}",
-        "max-size-time=0", "max-size-bytes=0", "leaky=downstream", "!",
+        "queue", f"max-size-buffers={queue_buffers}",
+        "max-size-time=0", "max-size-bytes=0", "leaky=downstream",
     ]
+    if startup_gate:
+        command.append(f"min-threshold-buffers={BANK_VIDEO_QUEUE_PREROLL}")
+    command.append("!")
     if startup_gate:
         command.extend(["valve", f"name=startup_gate_{branch_name}", "drop=true", "!"])
     if rate_mode == "normalize":

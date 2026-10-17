@@ -44,6 +44,8 @@ class BankTests(unittest.TestCase):
         self.assertIn("name=timestamp_sync_demux0", command)
         self.assertIn("name=timestamp_sync_demux1", command)
         self.assertEqual(command.count("sync-to-first=false"), 2)
+        self.assertEqual(command.count("max-size-buffers=12"), 2)
+        self.assertEqual(command.count("min-threshold-buffers=6"), 2)
         self.assertIn("--rate-numerator", command)
         self.assertIn("--rate-denominator", command)
         self.assertEqual(command.count("drop=true"), 2)
