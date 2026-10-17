@@ -103,6 +103,14 @@ preventing an incompatible, stalled, or presence-only path from appearing
 healthy. The package remains below candidate maturity until content-level A/V
 timing and flow-replacement recovery gates pass.
 
+The [NDI Input Module](inputs/ndi) is now an independently supervised
+prototype. It receives one NDI source per instance, normalizes cadence before
+scaling and threaded v210 conversion, publishes optional Float32/48 kHz audio,
+and exposes the common loopback health contract. Its offline pipeline,
+validation, and bounded-restart tests pass. It remains below candidate maturity
+until the timestamp A/B, two-camera moving-picture, recovery, audio, and staged
+endurance gates in its delivery plan pass on real senders.
+
 The [YouTube RTMPS output](outputs/rtmp) is a working 4K prototype with direct
 four- or eight-source MXL composition, CPU and optional NVENC profiles, a
 loopback-only operator window, in-memory stream-key handling, Program audio,
