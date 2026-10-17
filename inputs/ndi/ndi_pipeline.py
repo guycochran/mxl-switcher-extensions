@@ -48,6 +48,7 @@ def main(argv: list[str] | None = None) -> int:
 
     gates = []
     clock_syncs = []
+    timestamp_syncs = []
     iterator = pipeline.iterate_elements()
     while True:
         result, element = iterator.next()
@@ -56,10 +57,13 @@ def main(argv: list[str] | None = None) -> int:
                 gates.append(element)
             elif element.get_name().startswith("clock_sync_"):
                 clock_syncs.append(element)
+            elif element.get_name().startswith("timestamp_sync_"):
+                timestamp_syncs.append(element)
         elif result == Gst.IteratorResult.RESYNC:
             iterator.resync()
             gates.clear()
             clock_syncs.clear()
+            timestamp_syncs.clear()
         elif result == Gst.IteratorResult.DONE:
             break
         else:
@@ -68,6 +72,21 @@ def main(argv: list[str] | None = None) -> int:
         ready: set[str] = set()
         ready_lock = threading.Lock()
         opened = threading.Event()
+        frame_duration = Gst.util_uint64_scale(
+            args.rate_denominator, Gst.SECOND, args.rate_numerator
+        )
+        frame_numbers = {element.get_name(): 0 for element in timestamp_syncs}
+
+        def retimestamp(element, buffer) -> None:
+            name = element.get_name()
+            frame_number = frame_numbers[name]
+            buffer.pts = frame_number * frame_duration
+            buffer.dts = Gst.CLOCK_TIME_NONE
+            buffer.duration = frame_duration
+            frame_numbers[name] = frame_number + 1
+
+        for timestamp_sync in timestamp_syncs:
+            timestamp_sync.connect("handoff", retimestamp)
 
         def open_all() -> None:
             # All bank branches start their fixed-cadence timeline on one
@@ -75,9 +94,6 @@ def main(argv: list[str] | None = None) -> int:
             # preserve each receiver's arbitrary arrival phase.
             clock = pipeline.get_clock()
             running_time = clock.get_time() - pipeline.get_base_time()
-            frame_duration = Gst.util_uint64_scale(
-                args.rate_denominator, Gst.SECOND, args.rate_numerator
-            )
             shared_offset = running_time + 2 * frame_duration
             for clock_sync in clock_syncs:
                 clock_sync.set_property("ts-offset", shared_offset)

@@ -142,6 +142,7 @@ def gst_command(
     if pacing_mode == "retimestamp-clock-sync":
         command.extend([
             "identity",
+            *([f"name=timestamp_sync_{branch_name}"] if startup_gate else []),
             f"datarate={_v210_datarate(width, height, rate_numerator, rate_denominator)}",
             "single-segment=true",
             "!",
