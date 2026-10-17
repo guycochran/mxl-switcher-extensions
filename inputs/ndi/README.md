@@ -1,8 +1,11 @@
 # NDI Input Module
 
-Receive one NDI source and publish stable video and optional audio as paired MXL
-flows. One module instance owns one source; deploy additional independent
-instances for additional cameras.
+Receive NDI sources and publish stable video and optional audio as paired MXL
+flows. For switching two or more cameras, use the **NDI Input Bank** so every
+writer shares one GStreamer pipeline clock and one MXL clock-offset context.
+Independent per-camera writer processes are not a supported switcher topology:
+live qualification showed their MXL indexes can diverge even when each camera
+is individually smooth.
 
 **Maturity: prototype.** The optimized pipeline and bounded supervisor have
 offline coverage. Real-camera cadence, timestamp selection, recovery and
@@ -55,6 +58,37 @@ docker run --rm --network host \
   --pacing-mode clock-sync \
   --port 18130
 ```
+
+## Multi-input bank (recommended for switching)
+
+Create a private `bank.json` (do not commit real camera addresses):
+
+```json
+{
+  "sources": [
+    {"id":"camera-a", "source_address":"camera-a.example:5961", "video_flow":"00000000-0000-4000-8000-000000000101", "audio_mode":"disabled"},
+    {"id":"camera-b", "source_name":"CAMERA B", "video_flow":"00000000-0000-4000-8000-000000000201", "audio_mode":"disabled"}
+  ]
+}
+```
+
+Run all inputs in one container and pipeline:
+
+```sh
+docker run --rm --network host \
+  -v /dev/shm/mxl-ndi:/mxl-domain \
+  -v "$PWD/bank.json:/run/ndi-bank.json:ro" \
+  --entrypoint python3 mxl-ndi-input:prototype \
+  /opt/mxl-switcher-extensions/inputs/ndi/ndi_bank.py \
+  --domain /mxl-domain --config /run/ndi-bank.json \
+  --rate-mode passthrough --timestamp-mode receive-time \
+  --pacing-mode retimestamp-clock-sync --port 18130
+```
+
+`passthrough` fails closed unless every sender already matches the requested
+geometry and frame rate. Use `normalize` for mixed senders, accepting its added
+CPU cost. The health API reports counts only; it never returns source names,
+addresses, or flow IDs.
 
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI

@@ -75,6 +75,7 @@ def gst_command(
     pacing_mode: str,
     convert_threads: int,
     audio_channels: int,
+    branch_name: str = "demux",
 ) -> list[str]:
     """Build the optimized argv-only NDI-to-MXL pipeline."""
 
@@ -108,11 +109,13 @@ def gst_command(
         source.append(f"ndi-name={source_name}")
     else:
         source.append(f"url-address={source_address}")
-    source.extend([f"timestamp-mode={timestamp_mode}", "!", "ndisrcdemux", "name=demux"])
+    if not branch_name.replace("_", "").isalnum():
+        raise ValueError("invalid branch name")
+    source.extend([f"timestamp-mode={timestamp_mode}", "!", "ndisrcdemux", f"name={branch_name}"])
 
     command = [
         "gst-launch-1.0", "-e", "-q", *source,
-        "demux.video", "!",
+        f"{branch_name}.video", "!",
         "queue", f"max-size-buffers={VIDEO_QUEUE_BUFFERS}",
         "max-size-time=0", "max-size-bytes=0", "leaky=downstream", "!",
     ]
@@ -146,7 +149,7 @@ def gst_command(
     if audio_mode != "disabled":
         mask = hex((1 << audio_channels) - 1)
         command.extend([
-            "demux.audio", "!",
+            f"{branch_name}.audio", "!",
             "queue", f"max-size-time={AUDIO_QUEUE_NS}",
             "max-size-buffers=0", "max-size-bytes=0", "!",
             "audioconvert", "mix-matrix=<>", "!",
