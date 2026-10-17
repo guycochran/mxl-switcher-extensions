@@ -39,6 +39,7 @@ def command(**overrides):
         "rate_numerator": 30,
         "rate_denominator": 1,
         "timestamp_mode": "timestamp",
+        "pacing_mode": "none",
         "convert_threads": 4,
         "audio_channels": 2,
     }
@@ -76,6 +77,12 @@ class CommandTests(unittest.TestCase):
     def test_clocked_timestamp_mode_is_explicitly_supported(self):
         self.assertIn("timestamp-mode=clocked", command(timestamp_mode="clocked"))
 
+    def test_clock_sync_paces_after_conversion_before_mxl(self):
+        argv = command(pacing_mode="clock-sync")
+        self.assertLess(argv.index("videoconvert"), argv.index("clocksync"))
+        self.assertLess(argv.index("clocksync"), argv.index("mxlsink"))
+        self.assertIn("sync-to-first=true", argv)
+
     def test_optional_audio_is_normalized_and_disabled_audio_is_absent(self):
         argv = command(audio_channels=8)
         self.assertIn("audioresample", argv)
@@ -96,6 +103,8 @@ class CommandTests(unittest.TestCase):
             command(audio_mode="required", audio_flow=None)
         with self.assertRaises(ValueError):
             command(timestamp_mode="guess")
+        with self.assertRaises(ValueError):
+            command(pacing_mode="guess")
         with self.assertRaises(ValueError):
             command(source_name="CAMERA", source_address="192.0.2.10:5961")
         with self.assertRaises(ValueError):
@@ -138,6 +147,7 @@ class LifecycleTests(unittest.TestCase):
             rate_numerator=30,
             rate_denominator=1,
             timestamp_mode="timestamp",
+            pacing_mode="none",
             convert_threads=4,
             max_restarts=1,
             restart_window_seconds=60.0,

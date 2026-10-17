@@ -52,6 +52,7 @@ docker run --rm --network host \
   --width 1920 --height 1080 \
   --rate-numerator 30 --rate-denominator 1 \
   --timestamp-mode timestamp \
+  --pacing-mode clock-sync \
   --port 18130
 ```
 
@@ -78,6 +79,11 @@ The module exposes `receive-time`, `timestamp`, `timecode`, and the NDI
 plugin's clock-paced `clocked` mode. No mode is claimed as universally correct.
 Run the one-camera A/B gate and select the mode that produces the lowest Core
 held-frame ratio for the actual sender.
+
+`--pacing-mode clock-sync` places GStreamer's clock synchronizer immediately
+before the MXL writer so fixed-cadence buffers are committed on their PTS
+schedule rather than in upstream arrival bursts. It is opt-in until qualified;
+`none` preserves the unpaced path for comparison.
 
 ## Safety
 

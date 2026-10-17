@@ -32,7 +32,7 @@ ALLOWED_CHANNELS = (1, 2, 4, 8)
 TIMESTAMP_MODES = ("receive-time", "timestamp", "timecode", "clocked")
 REQUIRED_PLUGINS = (
     "ndisrc", "ndisrcdemux", "queue", "videorate", "videoscale",
-    "videoconvert", "audioconvert", "audioresample", "audiorate", "mxlsink",
+    "videoconvert", "clocksync", "audioconvert", "audioresample", "audiorate", "mxlsink",
 )
 
 
@@ -61,6 +61,7 @@ def gst_command(
     rate_numerator: int,
     rate_denominator: int,
     timestamp_mode: str,
+    pacing_mode: str,
     convert_threads: int,
     audio_channels: int,
 ) -> list[str]:
@@ -81,6 +82,8 @@ def gst_command(
         raise ValueError("width and height must be positive")
     if timestamp_mode not in TIMESTAMP_MODES:
         raise ValueError("unknown timestamp mode")
+    if pacing_mode not in {"none", "clock-sync"}:
+        raise ValueError("unknown pacing mode")
     if not 1 <= convert_threads <= 32:
         raise ValueError("convert threads must be between 1 and 32")
     if audio_channels not in ALLOWED_CHANNELS:
@@ -105,8 +108,10 @@ def gst_command(
         f"video/x-raw,width={width},height={height},pixel-aspect-ratio=1/1", "!",
         "videoconvert", f"n-threads={convert_threads}", "!",
         "video/x-raw,format=v210", "!",
-        "mxlsink", f"flow-id={video_flow}", f"domain={domain}",
     ]
+    if pacing_mode == "clock-sync":
+        command.extend(["clocksync", "sync-to-first=true", "!"])
+    command.extend(["mxlsink", f"flow-id={video_flow}", f"domain={domain}"])
     if audio_mode != "disabled":
         mask = hex((1 << audio_channels) - 1)
         command.extend([
@@ -191,6 +196,7 @@ class NDIInput:
             "target_rate_numerator": self.args.rate_numerator,
             "target_rate_denominator": self.args.rate_denominator,
             "timestamp_mode": self.args.timestamp_mode,
+            "pacing_mode": self.args.pacing_mode,
             "convert_threads": self.args.convert_threads,
             "audio_rate_hz": AUDIO_RATE,
             "audio_channels": self.args.audio_channels,
@@ -228,6 +234,7 @@ class NDIInput:
                 rate_numerator=self.args.rate_numerator,
                 rate_denominator=self.args.rate_denominator,
                 timestamp_mode=self.args.timestamp_mode,
+                pacing_mode=self.args.pacing_mode,
                 convert_threads=self.args.convert_threads,
                 audio_channels=self.args.audio_channels,
             )
@@ -324,6 +331,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="choose from measured sender behavior; no universal default is assumed",
     )
+    parser.add_argument("--pacing-mode", choices=("none", "clock-sync"), default="none")
     parser.add_argument("--convert-threads", type=int, default=4)
     parser.add_argument("--bind", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18130)
