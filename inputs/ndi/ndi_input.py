@@ -118,14 +118,18 @@ def gst_command(
     ]
     if rate_mode == "normalize":
         # Normalize cadence before the expensive scale and v210 conversion.
-        command.extend(["videorate", "!", f"video/x-raw,framerate={rate}", "!"])
+        command.extend([
+            "videorate", "!", f"video/x-raw,framerate={rate}", "!",
+            "videoscale", "add-borders=true", "!",
+            f"video/x-raw,width={width},height={height},pixel-aspect-ratio=1/1", "!",
+        ])
     else:
-        # A sender already running at the target cadence should not pass through
-        # videorate: some NDI clock modes can otherwise lose real-time cadence.
-        command.extend([f"video/x-raw,framerate={rate}", "!"])
+        # A sender already matching the target geometry and cadence should not
+        # pay for videorate or a no-op videoscale on constrained CPU hosts.
+        command.extend([
+            f"video/x-raw,width={width},height={height},pixel-aspect-ratio=1/1,framerate={rate}", "!",
+        ])
     command.extend([
-        "videoscale", "add-borders=true", "!",
-        f"video/x-raw,width={width},height={height},pixel-aspect-ratio=1/1", "!",
         "videoconvert", f"n-threads={convert_threads}", "!",
         "video/x-raw,format=v210", "!",
     ])

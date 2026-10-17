@@ -88,11 +88,13 @@ class CommandTests(unittest.TestCase):
     def test_clocked_timestamp_mode_is_explicitly_supported(self):
         self.assertIn("timestamp-mode=clocked", command(timestamp_mode="clocked"))
 
-    def test_passthrough_rate_omits_videorate_but_requires_target_caps(self):
+    def test_passthrough_rate_and_geometry_omit_normalizers_but_require_target_caps(self):
         argv = command(rate_mode="passthrough")
         self.assertNotIn("videorate", argv)
-        self.assertIn("video/x-raw,framerate=30/1", argv)
-        self.assertLess(argv.index("video/x-raw,framerate=30/1"), argv.index("videoscale"))
+        self.assertNotIn("videoscale", argv)
+        caps = "video/x-raw,width=1920,height=1080,pixel-aspect-ratio=1/1,framerate=30/1"
+        self.assertIn(caps, argv)
+        self.assertLess(argv.index(caps), argv.index("videoconvert"))
 
     def test_clock_sync_paces_after_conversion_before_mxl(self):
         argv = command(pacing_mode="clock-sync")
