@@ -48,8 +48,16 @@ do not open the operator web ports to the public Internet.
 
 ## 2. Stage the licensed software
 
-Obtain ZoomISO Cloud through its authorized vendor channel and use the vendor's
-documented installation procedure. Build the Apache-2.0 MXL SDK and
+Obtain ZoomISO Cloud through the vendor's public
+[Liminal apps page](https://liminal.zoom.us/#apps) and use the vendor's
+documented installation procedure. For a reproducible x86-64 test matching the
+accepted reference, Zoom currently publishes the
+[ZoomISO Cloud 0.1.0.77 AMD64 archive](https://cdn.zoom.us/prod/0.1.0.77/zoomiso-cloud-amd64-0.1.0.77.zip).
+Prefer the apps page when selecting a newer supported release, and record the
+exact version used in the test evidence. A public download does not remove the
+application's license and authorization requirements.
+
+Build the Apache-2.0 MXL SDK and
 `gst-mxl-rs` plugin from the public Media eXchange Layer project, or obtain an
 operator-controlled image containing them. Use an MXL revision compatible with
 the installed ZoomISO release; confirm that revision with the ZoomISO vendor or

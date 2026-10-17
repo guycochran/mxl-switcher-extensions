@@ -20,6 +20,10 @@ CPU profile used 32 modern logical CPUs and 128 GiB RAM; four sources can use a
 smaller host, but leave encoding headroom. No GPU is required for the proven
 CPU path.
 
+ZoomISO Cloud is available from the vendor's public
+[Liminal apps page](https://liminal.zoom.us/#apps). The prerequisite guide also
+records the exact AMD64 version used by the accepted reference test.
+
 The default image name `mxl-lab:latest` is a local lab convention, not a public
 download. Before using another tag, read the exact
 [prerequisite onboarding guide](deploy/online-demo/PREREQUISITES.md)
