@@ -73,6 +73,7 @@ class NDIBank:
                 rate_mode=self.args.rate_mode, timestamp_mode=self.args.timestamp_mode,
                 pacing_mode=self.args.pacing_mode, convert_threads=self.args.convert_threads,
                 audio_channels=source.get("audio_channels", 2), branch_name=f"demux{index}",
+                startup_gate=True,
             )
             tokens.extend(command[3:])
         return [sys.executable, str(pathlib.Path(__file__).with_name("ndi_pipeline.py")), "--", *tokens]

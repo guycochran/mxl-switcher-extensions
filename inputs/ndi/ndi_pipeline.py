@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import signal
+import threading
 
 
 def description(tokens: list[str]) -> str:
@@ -41,6 +42,29 @@ def main(argv: list[str] | None = None) -> int:
     Gst.init(None)
     pipeline = Gst.parse_launch(description(args.pipeline))
     pipeline.use_clock(Gst.SystemClock.obtain())
+
+    gates = [element for element in pipeline.iterate_elements()
+             if element.get_name().startswith("startup_gate_")]
+    if gates:
+        ready: set[str] = set()
+        ready_lock = threading.Lock()
+        opened = threading.Event()
+
+        def open_all() -> None:
+            for gate in gates:
+                gate.set_property("drop", False)
+            opened.set()
+
+        def observe(_pad, info, gate):
+            if info.type & Gst.PadProbeType.BUFFER:
+                with ready_lock:
+                    ready.add(gate.get_name())
+                    if len(ready) == len(gates) and not opened.is_set():
+                        threading.Thread(target=open_all, daemon=True).start()
+            return Gst.PadProbeReturn.OK
+
+        for gate in gates:
+            gate.get_static_pad("sink").add_probe(Gst.PadProbeType.BUFFER, observe, gate)
 
     def stop(*_unused) -> None:
         pipeline.send_event(Gst.Event.new_eos())

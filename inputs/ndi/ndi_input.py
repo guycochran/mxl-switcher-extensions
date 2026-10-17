@@ -31,7 +31,7 @@ FLOW_ACTIVE_SECONDS = 60.0
 ALLOWED_CHANNELS = (1, 2, 4, 8)
 TIMESTAMP_MODES = ("receive-time", "timestamp", "timecode", "clocked")
 REQUIRED_PLUGINS = (
-    "ndisrc", "ndisrcdemux", "queue", "videorate", "videoscale",
+    "ndisrc", "ndisrcdemux", "queue", "valve", "videorate", "videoscale",
     "videoconvert", "identity", "clocksync", "audioconvert", "audioresample", "audiorate", "mxlsink",
 )
 
@@ -76,6 +76,7 @@ def gst_command(
     convert_threads: int,
     audio_channels: int,
     branch_name: str = "demux",
+    startup_gate: bool = False,
 ) -> list[str]:
     """Build the optimized argv-only NDI-to-MXL pipeline."""
 
@@ -119,6 +120,8 @@ def gst_command(
         "queue", f"max-size-buffers={VIDEO_QUEUE_BUFFERS}",
         "max-size-time=0", "max-size-bytes=0", "leaky=downstream", "!",
     ]
+    if startup_gate:
+        command.extend(["valve", f"name=startup_gate_{branch_name}", "drop=true", "!"])
     if rate_mode == "normalize":
         # Normalize cadence before the expensive scale and v210 conversion.
         command.extend([

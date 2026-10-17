@@ -37,6 +37,9 @@ class BankTests(unittest.TestCase):
         self.assertEqual(command.count("ndisrc"), 2)
         self.assertIn("name=demux0", command); self.assertIn("name=demux1", command)
         self.assertIn("demux0.video", command); self.assertIn("demux1.video", command)
+        self.assertIn("name=startup_gate_demux0", command)
+        self.assertIn("name=startup_gate_demux1", command)
+        self.assertEqual(command.count("drop=true"), 2)
         self.assertNotIn("sh", command)
 
     def test_config_rejects_duplicate_flows_and_accepts_two_sources(self):
