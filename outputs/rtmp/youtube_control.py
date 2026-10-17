@@ -23,11 +23,20 @@ from youtube_8up_canvas import Input
 FLOW_LABEL = re.compile(r"^ZoomISO Cloud Instance Output (\d+) Video$")
 AUDIO_FLOW_LABEL = re.compile(r"^ZoomISO Cloud Instance Output (\d+) Audio$")
 MAX_REQUEST_BYTES = 8192
+# A flow counts as live when its ``data`` file was modified within this window.
+# Writers update ``data`` through a shared mmap, so the kernel refreshes its
+# mtime only when the dirty page is written back. With Ubuntu defaults
+# (vm.dirty_expire_centisecs=3000, vm.dirty_writeback_centisecs=500) the
+# observed mtime age of a healthy flow climbs to 30-35 s before resetting, so a
+# 30 s window briefly marks every source stale. 60 s leaves a clear margin.
+# A future check could confirm liveness from the advancing head index instead,
+# which needs the MXL SDK.
+FLOW_ACTIVE_SECONDS = 60.0
 
 
 def discover_zoomiso_video(
     domain: pathlib.Path,
-    active_seconds: float = 30.0,
+    active_seconds: float = FLOW_ACTIVE_SECONDS,
     preferred_flow_ids: set[str] | None = None,
 ) -> list[Input]:
     """Return one freshest active ZoomISO flow per numbered output."""
@@ -59,7 +68,7 @@ def discover_zoomiso_video(
 
 
 def audio_flow_active(
-    domain: pathlib.Path, flow_id: str | None, active_seconds: float = 30.0
+    domain: pathlib.Path, flow_id: str | None, active_seconds: float = FLOW_ACTIVE_SECONDS
 ) -> bool:
     """Return whether the configured Program audio flow exists and is being written."""
     if not flow_id or "/" in flow_id or flow_id.startswith("."):
@@ -77,7 +86,7 @@ def audio_flow_active(
 def discover_paired_audio(
     domain: pathlib.Path,
     sources: list[Input],
-    active_seconds: float = 30.0,
+    active_seconds: float = FLOW_ACTIVE_SECONDS,
 ) -> list[str]:
     """Return active audio flows paired to selected video outputs, in video order.
 
@@ -340,7 +349,7 @@ def parser() -> argparse.ArgumentParser:
     result = output_parser()
     result.description = __doc__
     result.set_defaults(stream_key_file=None, port=18121)
-    result.add_argument("--active-seconds", type=float, default=30.0)
+    result.add_argument("--active-seconds", type=float, default=FLOW_ACTIVE_SECONDS)
     result.add_argument("--source-count", type=int, choices=(4, 8), default=4)
     result.add_argument(
         "--preferred-flow", action="append",

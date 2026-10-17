@@ -91,6 +91,20 @@ class OnlineDemoTests(unittest.TestCase):
         os.utime(stale, (old, old))
         self.assertEqual(len(demo.discover(cfg)), 3)
 
+    def test_discovery_default_window_survives_mmap_writeback_mtime_lag(self):
+        # Shared-mmap writers only refresh mtime on kernel writeback, so a live
+        # flow's mtime age reaches 30-35 s under Ubuntu defaults.
+        self.assertEqual(demo.FLOW_ACTIVE_SECONDS, 60.0)
+        for flow_id in ("video-1", "audio-1", "video-2", "audio-2"):
+            lagging = self.domain / f"{flow_id}.mxl-flow" / "data"
+            old = time.time() - 34
+            os.utime(lagging, (old, old))
+        dead = self.domain / "video-3.mxl-flow" / "data"
+        old = time.time() - 90
+        os.utime(dead, (old, old))
+        found = demo.discover(demo.load_config(self.config_file))
+        self.assertEqual([row["flow_id"] for row in found], ["video-1", "video-2", "video-4"])
+
     def test_discovery_rejects_wrong_audio_media_type(self):
         definition = self.domain / "audio-4.mxl-flow" / "flow_def.json"
         value = json.loads(definition.read_text())
