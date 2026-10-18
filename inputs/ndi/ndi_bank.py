@@ -74,6 +74,7 @@ class NDIBank:
             "writer_mode": self.args.writer_mode,
             "timestamp_mode": self.args.timestamp_mode, "pacing_mode": self.args.pacing_mode,
             "rate_mode": self.args.rate_mode, "target_width": self.args.width,
+            "timing_report_seconds": getattr(self.args, "timing_report_seconds", 0),
             "target_height": self.args.height, "target_rate_numerator": self.args.rate_numerator,
             "target_rate_denominator": self.args.rate_denominator,
             "uptime_seconds": 0.0 if self.started_at is None else round(self.clock() - self.started_at, 3),
@@ -85,7 +86,7 @@ class NDIBank:
         if self.args.writer_mode == "native":
             if any(source["audio_mode"] != "disabled" for source in self.sources):
                 raise RuntimeError("native writer currently supports video-only banks")
-            return [
+            command = [
                 "/usr/local/bin/ndi-mxl-bank",
                 "--domain", str(self.args.domain),
                 "--source-count", str(len(self.sources)),
@@ -95,6 +96,11 @@ class NDIBank:
                 "--convert-threads", str(self.args.convert_threads),
                 "--timestamp-mode", self.args.timestamp_mode,
             ]
+            # Opt-in, secret-free per-stage scheduler timing on the child's stdout.
+            report = getattr(self.args, "timing_report_seconds", 0)
+            if report:
+                command.extend(["--timing-report-seconds", str(report)])
+            return command
         tokens: list[str] = []
         for index, source in enumerate(self.sources):
             command = gst_command(
@@ -245,7 +251,15 @@ def parse_args(argv=None):
     parser.add_argument("--poll-seconds", type=float, default=1.0); parser.add_argument("--stop-timeout-seconds", type=float, default=5.0)
     parser.add_argument("--max-restarts", type=int, default=3); parser.add_argument("--restart-window-seconds", type=float, default=60.0)
     parser.add_argument("--minimum-history-ns", type=int, default=MINIMUM_HISTORY_NS)
+    parser.add_argument(
+        "--timing-report-seconds", type=int, default=0,
+        help="native writer only: print per-stage scheduler timing every N seconds (0 = off)",
+    )
     args = parser.parse_args(argv)
+    if not 0 <= args.timing_report_seconds <= 3600:
+        parser.error("timing report interval must be 0-3600 seconds")
+    if args.timing_report_seconds and args.writer_mode != "native":
+        parser.error("timing reports require the native writer")
     if args.bind not in {"127.0.0.1", "::1", "localhost"}:
         parser.error("health bind must remain loopback-only")
     if args.minimum_history_ns < MINIMUM_HISTORY_NS:

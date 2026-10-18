@@ -102,6 +102,37 @@ class BankTests(unittest.TestCase):
         self.assertEqual(environment["NDI_BANK_SOURCE_1_VALUE"], "CAMERA B")
         self.assertEqual(environment["NDI_BANK_SOURCE_0_FLOW"], "video-a")
 
+    def test_native_timing_report_is_opt_in_and_secret_free(self):
+        self.args.writer_mode = "native"
+        bank = NDIBank(self.args, self.sources, popen=FakeProcess, clock=lambda: 10.0)
+        self.assertNotIn("--timing-report-seconds", bank._command())
+        self.args.timing_report_seconds = 10
+        command = bank._command()
+        position = command.index("--timing-report-seconds")
+        self.assertEqual(command[position + 1], "10")
+        for private in ("192.0.2.1:5961", "CAMERA B", "video-a", "video-b"):
+            self.assertNotIn(private, command)
+        self.assertEqual(bank.snapshot()["metrics"]["timing_report_seconds"], 10)
+
+    def test_timing_report_argument_is_bounded_and_native_only(self):
+        from inputs.ndi.ndi_bank import parse_args
+        base = ["--domain", self.tmp.name, "--config", "sources.json"]
+        self.assertEqual(parse_args(base).timing_report_seconds, 0)
+        self.assertEqual(parse_args([*base, "--timing-report-seconds", "5"]).timing_report_seconds, 5)
+        for bad in (["--timing-report-seconds", "-1"], ["--timing-report-seconds", "3601"],
+                    ["--timing-report-seconds", "5", "--writer-mode", "gstreamer"]):
+            with self.assertRaises(SystemExit):
+                parse_args([*base, *bad])
+
+    def test_native_source_keeps_timing_telemetry_free_of_identities(self):
+        source = (pathlib.Path(__file__).resolve().parents[1]
+                  / "inputs" / "ndi" / "native" / "ndi_mxl_bank.cpp").read_text()
+        report = source[source.index("void maybe_report"):source.index(" private:\n  static constexpr")]
+        for forbidden in ("selector", "required_env", "FLOW", "NDI_BANK_SOURCE", "VALUE"):
+            self.assertNotIn(forbidden, report)
+        self.assertIn('"timing-report-seconds"', source)
+        self.assertIn("RUSAGE_THREAD", source)
+
     def test_native_writer_fails_closed_for_audio_until_implemented(self):
         self.args.writer_mode = "native"
         sources = [dict(source) for source in self.sources]
