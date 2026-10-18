@@ -1,11 +1,11 @@
 # NDI Input Module
 
-Receive NDI sources and publish stable video and optional audio as paired MXL
-flows. For switching two or more cameras, use the **NDI Input Bank** so every
-writer shares one GStreamer pipeline clock and one MXL clock-offset context.
-Independent per-camera writer processes are not a supported switcher topology:
-live qualification showed their MXL indexes can diverge even when each camera
-is individually smooth.
+Receive NDI sources and publish stable video and optional audio as MXL flows.
+For switching two or more cameras, use the **NDI Input Bank**. Its native writer
+owns all video outputs and commits every source to the same explicit MXL grain
+index on each tick. Independent per-camera writers are not a supported switcher
+topology: live qualification showed their indexes can diverge even when each
+camera is individually smooth.
 
 **Maturity: prototype.** The optimized pipeline and bounded supervisor have
 offline coverage. Real-camera cadence, timestamp selection, recovery and
@@ -24,12 +24,12 @@ The single-input path deliberately orders video as:
 NDI decode -> bounded queue -> videorate -> scale -> threaded v210 conversion -> MXL
 ```
 
-The multi-input bank adds coordinated startup, a shared frame epoch, and a
-per-input live frame synchronizer ahead of a post-conversion pacing reservoir.
-The frame synchronizer emits fixed-cadence video and repeats the last picture
-through short arrival stalls. Together those pieces turn independently timed,
-bursty NDI receivers into clock-aligned MXL writers at the cost of bounded
-latency, CPU and memory.
+The multi-input bank uses GStreamer for NDI receive and v210 normalization, then
+hands the most recent real frame from each input to one native libmxl
+coordinator. The coordinator emits fixed-cadence video, repeats the last picture
+through short arrival stalls, and writes every flow at the same grain index.
+That turns independently timed, bursty receivers into a clock-aligned MXL input
+bank without relying on separate `mxlsink` schedules.
 
 The audio path drains NDI independently and normalizes it to interleaved
 Float32 at 48 kHz. Audio may be required, optional, or disabled.
@@ -101,8 +101,15 @@ docker run --rm --network host \
   /opt/mxl-switcher-extensions/inputs/ndi/ndi_bank.py \
   --domain /mxl-domain --config /run/ndi-bank.json \
   --rate-mode normalize --timestamp-mode receive-time \
-  --pacing-mode retimestamp-clock-sync --port 18130
+  --writer-mode native --port 18130
 ```
+
+`native` is the default bank writer. Source selectors and flow IDs are passed
+to the child through its private environment rather than process arguments, and
+neither the native process nor the health API prints them. The native bank
+currently requires `audio_mode: "disabled"`; it fails closed for audio instead
+of silently publishing an unqualified path. Use the single-input module for
+audio experiments until coordinated native audio is implemented and accepted.
 
 `passthrough` fails closed unless every sender already matches the requested
 geometry and frame rate. Use `normalize` for mixed senders, accepting its added
@@ -116,11 +123,26 @@ delivering buffers terminates the shared pipeline, makes readiness fail, and
 enters the supervisor's bounded restart policy instead of leaving a frozen
 source falsely marked healthy.
 
-On the older dual-Xeon qualification host, input heads committed about four
-frames behind the current TAI index. A downstream Core delay of six frames
-provided the measured safety margin. Treat that as a starting profile, not a
-universal constant: qualify the head-to-TAI offset on each host and retain at
-least two frames of additional margin inside the configured MXL history.
+On the older dual-Xeon qualification host, a one-second domain and a downstream
+Core delay of ten frames provided the current test margin. Treat that as a
+starting profile, not a universal constant: qualify the head-to-TAI offset on
+each host and retain at least two frames of additional margin inside the
+configured MXL history.
+
+## Current live evidence
+
+Real two-camera testing separated two problems that originally looked alike:
+
+| Boundary | Result |
+| --- | --- |
+| Independent and GStreamer-scheduled MXL writers | 27-35% held frames; up to 28 frames of source skew |
+| Native shared-index writer | 0-1 frame of source skew; no hard MXL counter movement |
+| Native writer plus unoptimized Core | Core fell behind because it copied every 1080p v210 output twice |
+| Native writer plus bounded Core hold-cache refresh | Preliminary 30-second smoke: 2.1% held, zero skips, zero hard errors, zero restarts |
+
+These are prototype qualification results, not a general NDI-versus-MXL
+benchmark. The planned 120-second, recovery, audio, and endurance gates still
+control promotion.
 
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI

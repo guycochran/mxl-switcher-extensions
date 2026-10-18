@@ -3,6 +3,12 @@ ARG BASE_IMAGE=mxl-lab:latest
 FROM ${BASE_IMAGE}
 
 WORKDIR /opt/mxl-switcher-extensions
+COPY inputs/ndi/native/ndi_mxl_bank.cpp /tmp/ndi_mxl_bank.cpp
+RUN g++ -std=c++20 -O2 -Wall -Wextra -Wpedantic \
+      $(pkg-config --cflags gstreamer-1.0 gstreamer-app-1.0) \
+      /tmp/ndi_mxl_bank.cpp -o /usr/local/bin/ndi-mxl-bank \
+      $(pkg-config --libs gstreamer-1.0 gstreamer-app-1.0) -lmxl \
+    && rm /tmp/ndi_mxl_bank.cpp
 COPY common ./common
 COPY inputs/ndi/ndi_input.py ./inputs/ndi/ndi_input.py
 COPY inputs/ndi/ndi_bank.py ./inputs/ndi/ndi_bank.py

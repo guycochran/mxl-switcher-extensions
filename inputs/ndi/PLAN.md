@@ -2,10 +2,15 @@
 
 ## Contract
 
-One independently supervised module receives one NDI source and publishes one
-stable v210 MXL video flow plus an optional Float32/48 kHz MXL audio flow.
-Multiple inputs are multiple module instances. A failed source must not restart
-another source, Core, Program or Preview.
+One independently supervised **NDI Input Bank** receives two to eight NDI
+sources and publishes one stable v210 MXL video flow per source. One native
+coordinator owns every MXL writer and commits all video flows to the same
+explicit grain index on each production tick. A failed source fails the bank
+closed, without restarting Core, Program, Preview, or unrelated services.
+
+The native bank is video-only today. Float32/48 kHz audio remains on the
+single-input GStreamer path until the coordinated native audio writer has its
+own continuity and recovery evidence.
 
 The production-normalized profile is 1920x1080 at 30/1. A later native profile
 may preserve source raster and cadence, but it is not the Office Hours default.
@@ -20,8 +25,13 @@ For each 1080p30 input on the reference Supermicro:
 - keep Core `held / routed` at or below 5 percent; and
 - produce no Core hard-counter movement or progressive RSS growth.
 
-The previous 1.7-2.2-core ingress cost and 46 percent held-frame result are the
-baseline to beat, not acceptance values.
+The previous independent/GStreamer writer experiments are comparison evidence,
+not acceptance values. They produced 27-35 percent held frames and as much as
+28 frames of cross-source skew despite zero hard MXL errors. The first native
+shared-index smoke reduced skew to 0-1 frame. Core then exposed a separate
+single-thread memory-copy bottleneck; refreshing its freeze-frame cache once
+per second instead of on every routed frame reduced a subsequent real-camera
+smoke to 2.1 percent held frames with zero skips and zero hard errors.
 
 ## Delivery stages
 
@@ -34,7 +44,7 @@ queue loss, CPU and RSS. Select the default only from evidence.
 
 ### 2. Two-input smoke
 
-Run two independent 1080p30 modules for 120 seconds with NDI returns,
+Run one two-source 1080p30 bank for 120 seconds with NDI returns,
 autoframing and continuous picture probes disabled. Exercise Preview, Cut and
 Take. Require visible motion on both sources and every performance-budget
 condition above.
@@ -63,9 +73,15 @@ source selection, direct address, detected and target formats, lifecycle state,
 input/output cadence, queue drops, reconnects, CPU/RSS and recent errors. Do not
 mount an unrestricted Docker socket; lifecycle control must be narrowly scoped.
 
-## Escalation decision
+## Architecture decision
 
-Continue with the GStreamer implementation if it meets the cadence and resource
-budget. Build a direct NDI SDK-to-libmxl implementation only if measurements
-show that GStreamer conversion, timestamp control or recovery prevents
-acceptance.
+The escalation threshold was reached. GStreamer remains responsible for NDI
+receive, cadence normalization, scaling, and v210 conversion, but `mxlsink` is
+no longer the bank writer. The native coordinator drains the latest converted
+frame from each receiver and uses the public libmxl C API to open and commit the
+same explicit MXL grain index for every flow. This preserves the portable NDI
+plugin boundary while making multi-flow cadence deterministic.
+
+Do not return to independent `mxlsink` tuning unless new evidence disproves the
+shared-index result. The remaining qualification work is lifecycle/recovery,
+native audio, and 10-minute/30-minute/eight-hour endurance in that order.

@@ -31,6 +31,7 @@ class BankTests(unittest.TestCase):
             domain=self.domain, width=1920, height=1080, rate_numerator=30, rate_denominator=1,
             rate_mode="normalize", timestamp_mode="receive-time",
             pacing_mode="retimestamp-clock-sync", convert_threads=4,
+            writer_mode="gstreamer",
             max_restarts=1, restart_window_seconds=60.0, poll_seconds=0.01,
             stop_timeout_seconds=0.1,
         )
@@ -84,6 +85,29 @@ class BankTests(unittest.TestCase):
         self.assertIn("2", command)
         self.assertEqual(command.count("drop=true"), 2)
         self.assertNotIn("sh", command)
+
+    def test_native_writer_keeps_private_selectors_out_of_argv(self):
+        self.args.writer_mode = "native"
+        bank = NDIBank(self.args, self.sources, popen=FakeProcess, clock=lambda: 10.0)
+        command = bank._command()
+        environment = bank._environment()
+        self.assertEqual(command[0], "/usr/local/bin/ndi-mxl-bank")
+        self.assertNotIn("192.0.2.1:5961", command)
+        self.assertNotIn("CAMERA B", command)
+        self.assertNotIn("video-a", command)
+        self.assertEqual(environment["NDI_BANK_SOURCE_0_TYPE"], "address")
+        self.assertEqual(environment["NDI_BANK_SOURCE_0_VALUE"], "192.0.2.1:5961")
+        self.assertEqual(environment["NDI_BANK_SOURCE_1_TYPE"], "name")
+        self.assertEqual(environment["NDI_BANK_SOURCE_1_VALUE"], "CAMERA B")
+        self.assertEqual(environment["NDI_BANK_SOURCE_0_FLOW"], "video-a")
+
+    def test_native_writer_fails_closed_for_audio_until_implemented(self):
+        self.args.writer_mode = "native"
+        sources = [dict(source) for source in self.sources]
+        sources[0].update(audio_mode="required", audio_flow="audio-a")
+        bank = NDIBank(self.args, sources, popen=FakeProcess, clock=lambda: 10.0)
+        with self.assertRaisesRegex(RuntimeError, "video-only"):
+            bank._command()
 
     def test_config_rejects_duplicate_flows_and_accepts_two_sources(self):
         path = self.domain / "bank.json"

@@ -77,6 +77,19 @@ class NDIBank:
         return self.runtime.snapshot()
 
     def _command(self) -> list[str]:
+        if self.args.writer_mode == "native":
+            if any(source["audio_mode"] != "disabled" for source in self.sources):
+                raise RuntimeError("native writer currently supports video-only banks")
+            return [
+                "/usr/local/bin/ndi-mxl-bank",
+                "--domain", str(self.args.domain),
+                "--source-count", str(len(self.sources)),
+                "--width", str(self.args.width), "--height", str(self.args.height),
+                "--rate-numerator", str(self.args.rate_numerator),
+                "--rate-denominator", str(self.args.rate_denominator),
+                "--convert-threads", str(self.args.convert_threads),
+                "--timestamp-mode", self.args.timestamp_mode,
+            ]
         tokens: list[str] = []
         for index, source in enumerate(self.sources):
             command = gst_command(
@@ -99,6 +112,21 @@ class NDIBank:
             "--", *tokens,
         ]
 
+    def _environment(self) -> dict[str, str]:
+        environment = os.environ.copy()
+        if self.args.writer_mode != "native":
+            return environment
+        for index, source in enumerate(self.sources):
+            prefix = f"NDI_BANK_SOURCE_{index}"
+            if source.get("source_name"):
+                environment[f"{prefix}_TYPE"] = "name"
+                environment[f"{prefix}_VALUE"] = source["source_name"]
+            else:
+                environment[f"{prefix}_TYPE"] = "address"
+                environment[f"{prefix}_VALUE"] = source["source_address"]
+            environment[f"{prefix}_FLOW"] = source["video_flow"]
+        return environment
+
     def start(self, *, restart=False) -> None:
         with self.lock:
             self.runtime.transition("starting")
@@ -114,8 +142,10 @@ class NDIBank:
                     self.runtime.transition("failed", error="restart budget exhausted")
                     raise RuntimeError("restart budget exhausted")
                 self.runtime.record_restart()
-            self.process = self.popen(self._command(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                      start_new_session=True)
+            self.process = self.popen(
+                self._command(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                start_new_session=True, env=self._environment(),
+            )
             self.started_at = self.clock()
 
     def check(self) -> str:
@@ -204,6 +234,7 @@ def parse_args(argv=None):
     parser.add_argument("--rate-mode", choices=("normalize", "passthrough"), default="passthrough")
     parser.add_argument("--timestamp-mode", choices=("receive-time", "timestamp", "timecode", "clocked"), default="receive-time")
     parser.add_argument("--pacing-mode", choices=("none", "clock-sync", "retimestamp-clock-sync"), default="retimestamp-clock-sync")
+    parser.add_argument("--writer-mode", choices=("native", "gstreamer"), default="native")
     parser.add_argument("--convert-threads", type=int, default=4)
     parser.add_argument("--bind", default="127.0.0.1"); parser.add_argument("--port", type=int, default=18130)
     parser.add_argument("--poll-seconds", type=float, default=1.0); parser.add_argument("--stop-timeout-seconds", type=float, default=5.0)
