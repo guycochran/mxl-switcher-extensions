@@ -163,6 +163,26 @@ shipped. Use the one-second profile as the documented baseline and move strict
 endurance qualification to a faster CPU rather than masking overload with
 undocumented latency.
 
+### Scheduler timing telemetry (opt-in)
+
+`--timing-report-seconds N` (native writer only, default `0` = off) makes the
+bank print one JSON line every N seconds with `"event":"ndi_bank_timing"`. It
+contains only durations and counters, never source selectors, addresses, flow
+IDs, or payloads:
+
+| Field | Distinguishes |
+| --- | --- |
+| `wake_late_ms_histogram`, `max_wake_late_us` | the coordinator woke after its tick deadline (scheduler/CPU contention) |
+| `catchup_ticks`, `max_frames_behind` | ticks that started already behind the MXL clock, and by how many indexes |
+| `max_update_us` | time draining the receivers' appsinks (NDI receive/decode handoff) |
+| `max_map_us`, `max_open_us`, `max_copy_us`, `max_commit_us` | buffer mapping, MXL grain open, payload copy, and commit for one flow |
+| `max_tick_work_us`, `mean_tick_work_us` | all work between waking and committing every flow |
+| `source_holds` | ticks where a receiver had no new picture (the last one was re-committed) |
+| `scheduler_involuntary_switches`, `scheduler_minor_faults`, `scheduler_major_faults` | coordinator-thread preemption and page faults |
+
+The telemetry measures; it changes no timing, index, latency, or acceptance
+behavior.
+
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI
 Discovery Server configuration remains an NDI-runtime concern and can be

@@ -3,9 +3,12 @@
 
 #include <gst/app/gstappsink.h>
 #include <gst/gst.h>
+#include <sys/resource.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
@@ -132,6 +135,104 @@ std::string flow_definition(const std::string& id, std::size_t ordinal,
          std::to_string(height) + ",\"bit_depth\":10}]}";
 }
 
+using Clock = std::chrono::steady_clock;
+
+std::int64_t elapsed_ns(Clock::time_point start, Clock::time_point end) {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+}
+
+// Optional, secret-free scheduler telemetry. It records only durations and
+// counters for the coordinator thread: never selectors, flow IDs, or payloads.
+// The stages separate a late wake (scheduler or CPU contention), NDI handoff
+// (`update`), buffer mapping, MXL grain open, payload copy, and commit.
+class TickTiming {
+ public:
+  explicit TickTiming(std::int64_t report_seconds) : report_seconds_(report_seconds) {
+    reset(Clock::now());
+  }
+  bool enabled() const { return report_seconds_ > 0; }
+
+  void wake(std::int64_t late_ns, std::uint64_t frames_behind) {
+    ++ticks_;
+    if (frames_behind > 0) ++catchup_ticks_;
+    max_frames_behind_ = std::max(max_frames_behind_, frames_behind);
+    max_wake_late_ns_ = std::max(max_wake_late_ns_, late_ns);
+    std::size_t bucket = 0;
+    while (bucket < kLateBucketsMs.size() && late_ns >= kLateBucketsMs[bucket] * 1'000'000) {
+      ++bucket;
+    }
+    ++late_histogram_[bucket];
+  }
+  void stage(std::int64_t& maximum, std::int64_t value) { maximum = std::max(maximum, value); }
+  void tick_done(std::int64_t work_ns) {
+    max_tick_work_ns_ = std::max(max_tick_work_ns_, work_ns);
+    total_tick_work_ns_ += work_ns;
+  }
+
+  std::int64_t max_update_ns{0}, max_map_ns{0}, max_open_ns{0}, max_copy_ns{0}, max_commit_ns{0};
+
+  void maybe_report(std::uint64_t source_holds) {
+    const auto now = Clock::now();
+    const auto interval = elapsed_ns(started_, now);
+    if (!enabled() || interval < report_seconds_ * 1'000'000'000) return;
+    rusage usage{};
+#ifdef RUSAGE_THREAD
+    getrusage(RUSAGE_THREAD, &usage);
+#else
+    getrusage(RUSAGE_SELF, &usage);
+#endif
+    std::cout << "{\"event\":\"ndi_bank_timing\",\"interval_s\":" << interval / 1'000'000'000.0
+              << ",\"ticks\":" << ticks_ << ",\"catchup_ticks\":" << catchup_ticks_
+              << ",\"max_frames_behind\":" << max_frames_behind_
+              << ",\"max_wake_late_us\":" << max_wake_late_ns_ / 1000
+              << ",\"wake_late_ms_histogram\":{";
+    for (std::size_t i = 0; i < late_histogram_.size(); ++i) {
+      std::cout << (i ? "," : "") << "\""
+                << (i < kLateBucketsMs.size() ? "lt_" + std::to_string(kLateBucketsMs[i])
+                                              : "ge_" + std::to_string(kLateBucketsMs.back()))
+                << "\":" << late_histogram_[i];
+    }
+    std::cout << "},\"max_update_us\":" << max_update_ns / 1000
+              << ",\"max_map_us\":" << max_map_ns / 1000
+              << ",\"max_open_us\":" << max_open_ns / 1000
+              << ",\"max_copy_us\":" << max_copy_ns / 1000
+              << ",\"max_commit_us\":" << max_commit_ns / 1000
+              << ",\"max_tick_work_us\":" << max_tick_work_ns_ / 1000
+              << ",\"mean_tick_work_us\":" << (ticks_ ? total_tick_work_ns_ / ticks_ / 1000 : 0)
+              << ",\"source_holds\":" << source_holds - holds_at_start_
+              << ",\"scheduler_involuntary_switches\":" << usage.ru_nivcsw - nivcsw_at_start_
+              << ",\"scheduler_voluntary_switches\":" << usage.ru_nvcsw - nvcsw_at_start_
+              << ",\"scheduler_minor_faults\":" << usage.ru_minflt - minflt_at_start_
+              << ",\"scheduler_major_faults\":" << usage.ru_majflt - majflt_at_start_
+              << "}" << std::endl;
+    holds_at_start_ = source_holds;
+    nivcsw_at_start_ = usage.ru_nivcsw;
+    nvcsw_at_start_ = usage.ru_nvcsw;
+    minflt_at_start_ = usage.ru_minflt;
+    majflt_at_start_ = usage.ru_majflt;
+    reset(now);
+  }
+
+ private:
+  static constexpr std::array<std::int64_t, 5> kLateBucketsMs{1, 5, 17, 34, 100};
+
+  void reset(Clock::time_point now) {
+    started_ = now;
+    ticks_ = catchup_ticks_ = max_frames_behind_ = 0;
+    max_wake_late_ns_ = max_tick_work_ns_ = total_tick_work_ns_ = 0;
+    max_update_ns = max_map_ns = max_open_ns = max_copy_ns = max_commit_ns = 0;
+    late_histogram_.fill(0);
+  }
+
+  std::int64_t report_seconds_;
+  Clock::time_point started_{};
+  std::uint64_t ticks_{0}, catchup_ticks_{0}, max_frames_behind_{0};
+  std::int64_t max_wake_late_ns_{0}, max_tick_work_ns_{0}, total_tick_work_ns_{0};
+  std::array<std::uint64_t, kLateBucketsMs.size() + 1> late_histogram_{};
+  std::uint64_t holds_at_start_{0};
+  long nivcsw_at_start_{0}, nvcsw_at_start_{0}, minflt_at_start_{0}, majflt_at_start_{0};
+};
+
 class Writer {
  public:
   Writer(mxlInstance instance, const std::string& definition)
@@ -153,14 +254,22 @@ class Writer {
   Writer(const Writer&) = delete;
   Writer& operator=(const Writer&) = delete;
 
-  void write(std::uint64_t index, GstBuffer* buffer) {
+  void write(std::uint64_t index, GstBuffer* buffer, TickTiming& timing) {
+    auto mark = Clock::now();
+    const auto lap = [&](std::int64_t& maximum) {
+      const auto now = Clock::now();
+      timing.stage(maximum, elapsed_ns(mark, now));
+      mark = now;
+    };
     GstMapInfo map{};
     if (!gst_buffer_map(buffer, &map, GST_MAP_READ)) {
       throw std::runtime_error("could not map decoded v210 frame");
     }
+    lap(timing.max_map_ns);
     mxlGrainInfo info{};
     std::uint8_t* payload = nullptr;
     auto status = mxlFlowWriterOpenGrain(handle_, index, &info, &payload);
+    lap(timing.max_open_ns);
     if (status != MXL_STATUS_OK) {
       gst_buffer_unmap(buffer, &map);
       throw mxl_error("mxlFlowWriterOpenGrain", status);
@@ -172,9 +281,11 @@ class Writer {
     }
     std::memcpy(payload, map.data, info.grainSize);
     gst_buffer_unmap(buffer, &map);
+    lap(timing.max_copy_ns);
     info.flags = 0;
     info.validSlices = info.totalSlices;
     status = mxlFlowWriterCommitGrain(handle_, &info);
+    lap(timing.max_commit_ns);
     if (status != MXL_STATUS_OK) {
       mxlFlowWriterCancelGrain(handle_);
       throw mxl_error("mxlFlowWriterCommitGrain", status);
@@ -299,6 +410,12 @@ int main(int argc, char** argv) {
     const auto rate_den = std::stoi(required(args, "rate-denominator"));
     const auto convert_threads = std::stoi(required(args, "convert-threads"));
     const auto& timestamp_mode = required(args, "timestamp-mode");
+    // Optional and off by default, so existing command lines are unchanged.
+    const auto report = args.find("timing-report-seconds");
+    const auto report_seconds = report == args.end() ? 0 : std::stoll(report->second);
+    if (report_seconds < 0 || report_seconds > 3600) {
+      throw std::invalid_argument("timing report interval must be 0-3600 seconds");
+    }
     if (count < 2 || count > 8 || width <= 0 || height <= 0 || rate_num <= 0 ||
         rate_den <= 0 || convert_threads < 1 || convert_threads > 32) {
       throw std::invalid_argument("invalid bank geometry, rate, or source count");
@@ -335,16 +452,32 @@ int main(int argc, char** argv) {
     auto index = mxlGetCurrentIndex(&rate) + 2;
     std::uint64_t ticks = 0;
     std::uint64_t repeated = 0;
+    TickTiming timing(report_seconds);
     while (running) {
-      mxlSleepForNs(mxlGetNsUntilIndex(index, &rate));
+      const auto until = mxlGetNsUntilIndex(index, &rate);
+      const auto deadline = Clock::now() + std::chrono::nanoseconds(until);
+      mxlSleepForNs(until);
+      const auto woke = Clock::now();
+      if (timing.enabled()) {
+        // A zero wait means the index was already due: count how far behind
+        // the MXL clock the coordinator is rather than inventing a lateness.
+        const auto current = mxlGetCurrentIndex(&rate);
+        timing.wake(std::max<std::int64_t>(0, elapsed_ns(deadline, woke)),
+                    current > index ? current - index : 0);
+      }
       for (auto& input : inputs) {
         input->check_bus();
         if (!input->update()) ++repeated;
       }
+      if (timing.enabled()) timing.stage(timing.max_update_ns, elapsed_ns(woke, Clock::now()));
       // One coordinator owns every writer. Each tick is committed to the same
       // explicit MXL index for all flows before the bank advances.
       for (std::size_t i = 0; i < count; ++i) {
-        writers[i]->write(index, inputs[i]->latest());
+        writers[i]->write(index, inputs[i]->latest(), timing);
+      }
+      if (timing.enabled()) {
+        timing.tick_done(elapsed_ns(woke, Clock::now()));
+        timing.maybe_report(repeated);
       }
       ++index;
       ++ticks;
