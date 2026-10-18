@@ -129,7 +129,10 @@ def gst_command(
         command.append(f"min-threshold-buffers={BANK_VIDEO_QUEUE_PREROLL}")
     command.append("!")
     if startup_gate:
-        command.extend(["valve", f"name=startup_gate_{branch_name}", "drop=true", "!"])
+        command.extend([
+            "watchdog", f"name=watchdog_{branch_name}", "timeout=30000", "!",
+            "identity", f"name=startup_probe_{branch_name}", "!",
+        ])
     if rate_mode == "normalize":
         if startup_gate:
             # A live aggregator is the bank's frame synchronizer: after the
@@ -137,7 +140,7 @@ def gst_command(
             # last picture through bounded NDI arrival stalls.
             command.extend([
                 "compositor", f"name=frame_sync_{branch_name}",
-                "background=black", "ignore-inactive-pads=true",
+                "background=black", "force-live=true", "ignore-inactive-pads=true",
                 "latency=200000000", "max-threads=2", "!",
                 f"video/x-raw,width={width},height={height},pixel-aspect-ratio=1/1,framerate={rate}", "!",
             ])
@@ -154,6 +157,8 @@ def gst_command(
         command.extend([
             f"video/x-raw,width={width},height={height},pixel-aspect-ratio=1/1,framerate={rate}", "!",
         ])
+    if startup_gate:
+        command.extend(["valve", f"name=startup_gate_{branch_name}", "drop=true", "!"])
     command.extend([
         "videoconvert", f"n-threads={convert_threads}", "!",
         "video/x-raw,format=v210", "!",
@@ -172,7 +177,6 @@ def gst_command(
                 f"max-size-buffers={BANK_PACING_QUEUE_BUFFERS}",
                 f"min-threshold-buffers={BANK_PACING_QUEUE_PREROLL}",
                 "max-size-time=0", "max-size-bytes=0", "!",
-                "watchdog", f"name=watchdog_{branch_name}", "timeout=30000", "!",
             ])
     if pacing_mode in {"clock-sync", "retimestamp-clock-sync"}:
         if startup_gate:

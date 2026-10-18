@@ -52,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     pipeline.use_clock(Gst.SystemClock.obtain())
 
     gates = []
+    startup_probes = []
     timestamp_syncs = []
     iterator = pipeline.iterate_elements()
     while True:
@@ -59,11 +60,14 @@ def main(argv: list[str] | None = None) -> int:
         if result == Gst.IteratorResult.OK:
             if element.get_name().startswith("startup_gate_"):
                 gates.append(element)
+            elif element.get_name().startswith("startup_probe_"):
+                startup_probes.append(element)
             elif element.get_name().startswith("timestamp_sync_"):
                 timestamp_syncs.append(element)
         elif result == Gst.IteratorResult.RESYNC:
             iterator.resync()
             gates.clear()
+            startup_probes.clear()
             timestamp_syncs.clear()
         elif result == Gst.IteratorResult.DONE:
             break
@@ -107,12 +111,14 @@ def main(argv: list[str] | None = None) -> int:
             if info.type & Gst.PadProbeType.BUFFER:
                 with ready_lock:
                     ready.add(gate.get_name())
-                    if len(ready) == len(gates) and not opened.is_set():
+                    if len(ready) == len(startup_probes) and not opened.is_set():
                         threading.Thread(target=open_all, daemon=True).start()
             return Gst.PadProbeReturn.OK
 
-        for gate in gates:
-            gate.get_static_pad("sink").add_probe(Gst.PadProbeType.BUFFER, observe, gate)
+        for startup_probe in startup_probes:
+            startup_probe.get_static_pad("sink").add_probe(
+                Gst.PadProbeType.BUFFER, observe, startup_probe
+            )
 
     def stop(*_unused) -> None:
         pipeline.send_event(Gst.Event.new_eos())
