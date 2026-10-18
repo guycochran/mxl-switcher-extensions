@@ -76,6 +76,7 @@ class NDIBank:
             "rate_mode": self.args.rate_mode, "target_width": self.args.width,
             "timing_report_seconds": getattr(self.args, "timing_report_seconds", 0),
             "copy_workers": getattr(self.args, "copy_workers", 0),
+            "copy_mode": getattr(self.args, "copy_mode", "split-payload"),
             "target_height": self.args.height, "target_rate_numerator": self.args.rate_numerator,
             "target_rate_denominator": self.args.rate_denominator,
             "uptime_seconds": 0.0 if self.started_at is None else round(self.clock() - self.started_at, 3),
@@ -104,6 +105,9 @@ class NDIBank:
             copy_workers = getattr(self.args, "copy_workers", 0)
             if copy_workers:
                 command.extend(["--copy-workers", str(copy_workers)])
+                copy_mode = getattr(self.args, "copy_mode", "split-payload")
+                if copy_mode != "split-payload":
+                    command.extend(["--copy-mode", copy_mode])
             return command
         tokens: list[str] = []
         for index, source in enumerate(self.sources):
@@ -263,6 +267,10 @@ def parse_args(argv=None):
         "--copy-workers", type=int, choices=(0, 1), default=0,
         help="native writer only: persistent helper threads for payload copy (default 0)",
     )
+    parser.add_argument(
+        "--copy-mode", choices=("split-payload", "source-pair"), default="split-payload",
+        help="native writer only: experimental helper strategy (default split-payload)",
+    )
     args = parser.parse_args(argv)
     if not 0 <= args.timing_report_seconds <= 3600:
         parser.error("timing report interval must be 0-3600 seconds")
@@ -270,6 +278,8 @@ def parse_args(argv=None):
         parser.error("timing reports require the native writer")
     if args.copy_workers and args.writer_mode != "native":
         parser.error("copy workers require the native writer")
+    if args.copy_mode != "split-payload" and not args.copy_workers:
+        parser.error("non-default copy mode requires one copy worker")
     if args.bind not in {"127.0.0.1", "::1", "localhost"}:
         parser.error("health bind must remain loopback-only")
     if args.minimum_history_ns < MINIMUM_HISTORY_NS:

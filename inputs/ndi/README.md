@@ -200,6 +200,18 @@ not improve the default-placement result. Treat these as evidence of a
 copy-path and host-scheduling boundary, not as an NDI-format comparison; a
 clean-host no-skip gate still controls promotion.
 
+`--copy-mode source-pair` is a narrower experiment for an exactly two-source
+native bank and requires `--copy-workers 1`. The coordinator maps and opens
+both source grains at one shared index, one persistent helper copies the second
+complete payload while the coordinator copies the first, and the coordinator
+then unmaps and commits both grains serially. The helper still never calls
+GStreamer or MXL. Failures before commit cancel every open grain; a failure on
+the second commit terminates the child and reports an explicit partial-commit
+error because the first publication cannot be rolled back. An isolated runtime
+ABI smoke confirmed that two distinct writer handles can each hold one open
+grain concurrently. This mode remains off by default until it passes the same
+clean-host no-skip gate.
+
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI
 Discovery Server configuration remains an NDI-runtime concern and can be

@@ -128,9 +128,13 @@ class BankTests(unittest.TestCase):
         from inputs.ndi.ndi_bank import parse_args
         base = ["--domain", self.tmp.name, "--config", "sources.json"]
         self.assertEqual(parse_args(base).copy_workers, 0)
+        self.assertEqual(parse_args(base).copy_mode, "split-payload")
         self.assertEqual(parse_args([*base, "--copy-workers", "1"]).copy_workers, 1)
+        pair = parse_args([*base, "--copy-workers", "1", "--copy-mode", "source-pair"])
+        self.assertEqual(pair.copy_mode, "source-pair")
         for bad in (["--copy-workers", "2"],
-                    ["--copy-workers", "1", "--writer-mode", "gstreamer"]):
+                    ["--copy-workers", "1", "--writer-mode", "gstreamer"],
+                    ["--copy-mode", "source-pair"]):
             with self.assertRaises(SystemExit):
                 parse_args([*base, *bad])
 
@@ -142,12 +146,26 @@ class BankTests(unittest.TestCase):
         command = bank._command()
         position = command.index("--copy-workers")
         self.assertEqual(command[position + 1], "1")
+        self.assertNotIn("--copy-mode", command)
+        self.args.copy_mode = "source-pair"
+        command = bank._command()
+        position = command.index("--copy-mode")
+        self.assertEqual(command[position + 1], "source-pair")
         source = (pathlib.Path(__file__).resolve().parents[1]
                   / "inputs" / "ndi" / "native" / "ndi_mxl_bank.cpp").read_text()
         copier = source[source.index("class PayloadCopier"):source.index("class Writer")]
         self.assertNotIn("mxlFlowWriter", copier)
         self.assertNotIn("gst_", copier)
-        self.assertIn("copier.copy(payload, map.data, info.grainSize)", source)
+        self.assertIn("copier.copy_split(pending->destination(), pending->source()", source)
+        pair_start = source.rindex('if (copy_mode == "source-pair")')
+        pair_block = source[pair_start:source.index("} else {", pair_start)]
+        self.assertIn("writers[0]->prepare", pair_block)
+        self.assertIn("writers[1]->prepare", pair_block)
+        self.assertIn("copier.copy_pair", pair_block)
+        self.assertIn("first->finish_copy()", pair_block)
+        self.assertIn("second->finish_copy()", pair_block)
+        self.assertIn("first->commit", pair_block)
+        self.assertIn("second->commit", pair_block)
 
     def test_native_source_keeps_timing_telemetry_free_of_identities(self):
         source = (pathlib.Path(__file__).resolve().parents[1]

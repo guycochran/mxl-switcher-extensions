@@ -257,28 +257,51 @@ class PayloadCopier {
   PayloadCopier(const PayloadCopier&) = delete;
   PayloadCopier& operator=(const PayloadCopier&) = delete;
 
-  void copy(std::uint8_t* destination, const std::uint8_t* source,
-            std::size_t size) {
+  void copy_split(std::uint8_t* destination, const std::uint8_t* source,
+                  std::size_t size) {
     if (workers_ == 0 || size < 2) {
       std::memcpy(destination, source, size);
       return;
     }
     const auto first_size = size / 2;
+    dispatch(destination + first_size, source + first_size, size - first_size);
+    std::memcpy(destination, source, first_size);
+    wait();
+  }
+
+  void copy_pair(std::uint8_t* first_destination,
+                 const std::uint8_t* first_source, std::size_t first_size,
+                 std::uint8_t* second_destination,
+                 const std::uint8_t* second_source, std::size_t second_size) {
+    if (workers_ == 0) {
+      std::memcpy(first_destination, first_source, first_size);
+      std::memcpy(second_destination, second_source, second_size);
+      return;
+    }
+    dispatch(second_destination, second_source, second_size);
+    std::memcpy(first_destination, first_source, first_size);
+    wait();
+  }
+
+ private:
+  void dispatch(std::uint8_t* destination, const std::uint8_t* source,
+                std::size_t size) {
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      destination_ = destination + first_size;
-      source_ = source + first_size;
-      size_ = size - first_size;
+      destination_ = destination;
+      source_ = source;
+      size_ = size;
       done_ = false;
       pending_ = true;
     }
     work_ready_.notify_one();
-    std::memcpy(destination, source, first_size);
+  }
+
+  void wait() {
     std::unique_lock<std::mutex> lock(mutex_);
     work_done_.wait(lock, [this] { return done_; });
   }
 
- private:
   void run() {
     std::unique_lock<std::mutex> lock(mutex_);
     while (true) {
@@ -327,43 +350,98 @@ class Writer {
   Writer(const Writer&) = delete;
   Writer& operator=(const Writer&) = delete;
 
+  class PendingWrite {
+   public:
+    PendingWrite(mxlFlowWriter handle, std::uint64_t index, GstBuffer* buffer,
+                 TickTiming& timing)
+        : handle_(handle), buffer_(buffer) {
+      auto mark = Clock::now();
+      if (!gst_buffer_map(buffer_, &map_, GST_MAP_READ)) {
+        throw std::runtime_error("could not map decoded v210 frame");
+      }
+      mapped_ = true;
+      auto now = Clock::now();
+      timing.stage(timing.max_map_ns, elapsed_ns(mark, now));
+      mark = now;
+      const auto status =
+          mxlFlowWriterOpenGrain(handle_, index, &info_, &payload_);
+      now = Clock::now();
+      timing.stage(timing.max_open_ns, elapsed_ns(mark, now));
+      if (status != MXL_STATUS_OK) {
+        gst_buffer_unmap(buffer_, &map_);
+        mapped_ = false;
+        throw mxl_error("mxlFlowWriterOpenGrain", status);
+      }
+      opened_ = true;
+      if (payload_ == nullptr || map_.size < info_.grainSize) {
+        (void)mxlFlowWriterCancelGrain(handle_);
+        opened_ = false;
+        gst_buffer_unmap(buffer_, &map_);
+        mapped_ = false;
+        throw std::runtime_error("decoded frame is smaller than the MXL grain");
+      }
+    }
+
+    ~PendingWrite() {
+      if (opened_) (void)mxlFlowWriterCancelGrain(handle_);
+      if (mapped_) gst_buffer_unmap(buffer_, &map_);
+    }
+    PendingWrite(const PendingWrite&) = delete;
+    PendingWrite& operator=(const PendingWrite&) = delete;
+
+    std::uint8_t* destination() const { return payload_; }
+    const std::uint8_t* source() const { return map_.data; }
+    std::size_t size() const { return info_.grainSize; }
+
+    void finish_copy() {
+      if (mapped_) {
+        gst_buffer_unmap(buffer_, &map_);
+        mapped_ = false;
+      }
+    }
+
+    void commit(TickTiming& timing) {
+      if (mapped_) throw std::logic_error("copy must finish before commit");
+      info_.flags = 0;
+      info_.validSlices = info_.totalSlices;
+      const auto started = Clock::now();
+      const auto status = mxlFlowWriterCommitGrain(handle_, &info_);
+      timing.stage(timing.max_commit_ns,
+                   elapsed_ns(started, Clock::now()));
+      if (status != MXL_STATUS_OK) {
+        (void)mxlFlowWriterCancelGrain(handle_);
+        opened_ = false;
+        throw mxl_error("mxlFlowWriterCommitGrain", status);
+      }
+      opened_ = false;
+    }
+
+   private:
+    mxlFlowWriter handle_{nullptr};
+    GstBuffer* buffer_{nullptr};
+    GstMapInfo map_{};
+    mxlGrainInfo info_{};
+    std::uint8_t* payload_{nullptr};
+    bool mapped_{false};
+    bool opened_{false};
+  };
+
+  std::unique_ptr<PendingWrite> prepare(std::uint64_t index,
+                                        GstBuffer* buffer,
+                                        TickTiming& timing) {
+    return std::make_unique<PendingWrite>(handle_, index, buffer, timing);
+  }
+
   void write(std::uint64_t index, GstBuffer* buffer, TickTiming& timing,
              PayloadCopier& copier) {
-    auto mark = Clock::now();
-    const auto lap = [&](std::int64_t& maximum) {
-      const auto now = Clock::now();
-      timing.stage(maximum, elapsed_ns(mark, now));
-      mark = now;
-    };
-    GstMapInfo map{};
-    if (!gst_buffer_map(buffer, &map, GST_MAP_READ)) {
-      throw std::runtime_error("could not map decoded v210 frame");
-    }
-    lap(timing.max_map_ns);
-    mxlGrainInfo info{};
-    std::uint8_t* payload = nullptr;
-    auto status = mxlFlowWriterOpenGrain(handle_, index, &info, &payload);
-    lap(timing.max_open_ns);
-    if (status != MXL_STATUS_OK) {
-      gst_buffer_unmap(buffer, &map);
-      throw mxl_error("mxlFlowWriterOpenGrain", status);
-    }
-    if (payload == nullptr || map.size < info.grainSize) {
-      mxlFlowWriterCancelGrain(handle_);
-      gst_buffer_unmap(buffer, &map);
-      throw std::runtime_error("decoded frame is smaller than the MXL grain");
-    }
-    copier.copy(payload, map.data, info.grainSize);
-    gst_buffer_unmap(buffer, &map);
-    lap(timing.max_copy_ns);
-    info.flags = 0;
-    info.validSlices = info.totalSlices;
-    status = mxlFlowWriterCommitGrain(handle_, &info);
-    lap(timing.max_commit_ns);
-    if (status != MXL_STATUS_OK) {
-      mxlFlowWriterCancelGrain(handle_);
-      throw mxl_error("mxlFlowWriterCommitGrain", status);
-    }
+    auto pending = prepare(index, buffer, timing);
+    const auto copy_started = Clock::now();
+    copier.copy_split(pending->destination(), pending->source(),
+                      pending->size());
+    pending->finish_copy();
+    timing.stage(timing.max_copy_ns,
+                 elapsed_ns(copy_started, Clock::now()));
+    pending->commit(timing);
   }
 
  private:
@@ -487,6 +565,10 @@ int main(int argc, char** argv) {
     const auto copy_workers_arg = args.find("copy-workers");
     const auto copy_workers =
         copy_workers_arg == args.end() ? 0 : std::stoi(copy_workers_arg->second);
+    const auto copy_mode_arg = args.find("copy-mode");
+    const auto copy_mode = copy_mode_arg == args.end()
+                               ? std::string{"split-payload"}
+                               : copy_mode_arg->second;
     // Optional and off by default, so existing command lines are unchanged.
     const auto report = args.find("timing-report-seconds");
     const auto report_seconds = report == args.end() ? 0 : std::stoll(report->second);
@@ -497,6 +579,13 @@ int main(int argc, char** argv) {
         rate_den <= 0 || convert_threads < 1 || convert_threads > 32 ||
         copy_workers < 0 || copy_workers > 1) {
       throw std::invalid_argument("invalid bank geometry, rate, or source count");
+    }
+    if (copy_mode != "split-payload" && copy_mode != "source-pair") {
+      throw std::invalid_argument("invalid copy mode");
+    }
+    if (copy_mode == "source-pair" && (copy_workers != 1 || count != 2)) {
+      throw std::invalid_argument(
+          "source-pair copy requires one helper and exactly two sources");
     }
 
     instance = mxlCreateInstance(domain.c_str(), nullptr);
@@ -550,9 +639,31 @@ int main(int argc, char** argv) {
       }
       if (timing.enabled()) timing.stage(timing.max_update_ns, elapsed_ns(woke, Clock::now()));
       // One coordinator owns every writer. Each tick is committed to the same
-      // explicit MXL index for all flows before the bank advances.
-      for (std::size_t i = 0; i < count; ++i) {
-        writers[i]->write(index, inputs[i]->latest(), timing, copier);
+      // explicit MXL index for all flows before the bank advances. The
+      // source-pair experiment opens/maps both flows on this coordinator, lets
+      // one helper copy the second complete payload, then returns here for all
+      // GStreamer unmaps and MXL commits.
+      if (copy_mode == "source-pair") {
+        auto first = writers[0]->prepare(index, inputs[0]->latest(), timing);
+        auto second = writers[1]->prepare(index, inputs[1]->latest(), timing);
+        const auto copy_started = Clock::now();
+        copier.copy_pair(first->destination(), first->source(), first->size(),
+                         second->destination(), second->source(), second->size());
+        first->finish_copy();
+        second->finish_copy();
+        timing.stage(timing.max_copy_ns,
+                     elapsed_ns(copy_started, Clock::now()));
+        first->commit(timing);
+        try {
+          second->commit(timing);
+        } catch (const std::exception& error) {
+          throw std::runtime_error("partial source-pair commit: " +
+                                   std::string(error.what()));
+        }
+      } else {
+        for (std::size_t i = 0; i < count; ++i) {
+          writers[i]->write(index, inputs[i]->latest(), timing, copier);
+        }
       }
       if (timing.enabled()) {
         timing.tick_done(elapsed_ns(woke, Clock::now()));
