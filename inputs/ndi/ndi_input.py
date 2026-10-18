@@ -27,6 +27,8 @@ from common.runtime import ExtensionRuntime, RestartBudget
 VIDEO_QUEUE_BUFFERS = 4
 BANK_VIDEO_QUEUE_BUFFERS = 12
 BANK_VIDEO_QUEUE_PREROLL = 6
+BANK_PACING_QUEUE_BUFFERS = 30
+BANK_PACING_QUEUE_PREROLL = 20
 AUDIO_QUEUE_NS = 200_000_000
 AUDIO_RATE = 48_000
 FLOW_ACTIVE_SECONDS = 60.0
@@ -156,8 +158,8 @@ def gst_command(
         if startup_gate:
             command.extend([
                 "queue", f"name=pacing_queue_{branch_name}",
-                f"max-size-buffers={BANK_VIDEO_QUEUE_BUFFERS}",
-                f"min-threshold-buffers={BANK_VIDEO_QUEUE_PREROLL}",
+                f"max-size-buffers={BANK_PACING_QUEUE_BUFFERS}",
+                f"min-threshold-buffers={BANK_PACING_QUEUE_PREROLL}",
                 "max-size-time=0", "max-size-bytes=0", "!",
             ])
     if pacing_mode in {"clock-sync", "retimestamp-clock-sync"}:
