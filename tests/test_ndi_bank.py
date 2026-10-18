@@ -52,6 +52,8 @@ class BankTests(unittest.TestCase):
         self.assertEqual(command.count("min-threshold-buffers=20"), 2)
         self.assertIn("--rate-numerator", command)
         self.assertIn("--rate-denominator", command)
+        self.assertIn("--startup-lead-frames", command)
+        self.assertIn("22", command)
         self.assertEqual(command.count("drop=true"), 2)
         self.assertNotIn("sh", command)
 

@@ -35,12 +35,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rate-numerator", type=int, default=30)
     parser.add_argument("--rate-denominator", type=int, default=1)
+    parser.add_argument("--startup-lead-frames", type=int, default=2)
     parser.add_argument("pipeline", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.pipeline[:1] == ["--"]:
         args.pipeline = args.pipeline[1:]
     if not args.pipeline:
         parser.error("pipeline tokens are required after --")
+    if args.rate_numerator <= 0 or args.rate_denominator <= 0:
+        parser.error("rate numerator and denominator must be positive")
+    if args.startup_lead_frames < 0:
+        parser.error("startup lead frames must not be negative")
 
     Gst.init(None)
     pipeline = Gst.parse_launch(description(args.pipeline))
@@ -91,7 +96,9 @@ def main(argv: list[str] | None = None) -> int:
             # preserve each receiver's arbitrary arrival phase.
             clock = pipeline.get_clock()
             running_time = clock.get_time() - pipeline.get_base_time()
-            timeline_epoch[0] = running_time + 2 * frame_duration
+            timeline_epoch[0] = (
+                running_time + args.startup_lead_frames * frame_duration
+            )
             for gate in gates:
                 gate.set_property("drop", False)
             opened.set()
