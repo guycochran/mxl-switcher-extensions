@@ -184,11 +184,6 @@ def gst_command(
                 f"datarate={_v210_datarate(width, height, rate_numerator, rate_denominator)}",
                 "single-segment=true", "!",
             ])
-        if pacing_mode in {"clock-sync", "retimestamp-clock-sync"}:
-            command.extend([
-                "clocksync", f"name=clock_sync_{branch_name}",
-                "sync-to-first=false", "!",
-            ])
     if not bank_frame_sync:
         command.extend(["videoconvert", f"n-threads={convert_threads}", "!"])
         if startup_gate:
