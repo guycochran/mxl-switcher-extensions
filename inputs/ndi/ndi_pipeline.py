@@ -109,6 +109,14 @@ def main(argv: list[str] | None = None) -> int:
             timestamp_sync.connect("handoff", retimestamp)
 
         def open_all() -> None:
+            # appsinks may deliver preroll while the pipeline is still moving
+            # from PAUSED to PLAYING.  Do not push the first appsrc buffer
+            # until downstream caps negotiation and live-state propagation
+            # have completed.
+            _change, current, _pending = pipeline.get_state(10 * Gst.SECOND)
+            if current != Gst.State.PLAYING:
+                pump_stop.set()
+                return
             # All bank branches start their fixed-cadence timeline on one
             # pipeline-clock boundary.  Per-branch sync-to-first offsets would
             # preserve each receiver's arbitrary arrival phase.
