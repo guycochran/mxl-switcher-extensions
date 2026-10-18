@@ -179,6 +179,13 @@ alarm and hard-counter delta remained zero. This qualifies the experimental
 two-source video split-copy path on that host class; it does not qualify NDI
 audio, recovery, larger banks, or every NDI codec/source combination.
 
+A later unattended rerun, after hardening the harness's cleanup contract,
+stopped at candidate readiness because the recovered sender had not resumed
+the two live NDI sources. The harness removed both temporary containers and
+its marked MXL domain, and the cloud hosts were deallocated. This is useful
+fail-closed lifecycle evidence, but it is not a second media-path gate and does
+not yet confirm the new root cleanup contract after a passing live run.
+
 Follow-up three-minute diagnostics confirmed that the remaining skips are
 scheduler-deadline misses on the older qualification CPU. Increasing MXL
 history from one to two seconds reduced holds and catch-up events, and combining
