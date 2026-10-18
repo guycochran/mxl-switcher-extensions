@@ -23,6 +23,10 @@ from inputs.ndi.ndi_input import _flow_name, gst_command, plugin_preflight
 
 HISTORY_OPTION = "urn:x-mxl:option:history_duration/v1.0"
 MINIMUM_HISTORY_NS = 1_000_000_000
+NATIVE_BANK_PLUGINS = (
+    "ndisrc", "ndisrcdemux", "queue", "watchdog", "videorate",
+    "videoscale", "videoconvert", "appsink",
+)
 
 
 def validate_domain_history(domain: pathlib.Path, minimum_ns: int) -> None:
@@ -67,6 +71,7 @@ class NDIBank:
         self.runtime.publish_metrics({
             "pipeline_alive": alive, "pipeline_clock": "system",
             "configured_inputs": len(self.sources), "ready_inputs": ready_count,
+            "writer_mode": self.args.writer_mode,
             "timestamp_mode": self.args.timestamp_mode, "pacing_mode": self.args.pacing_mode,
             "rate_mode": self.args.rate_mode, "target_width": self.args.width,
             "target_height": self.args.height, "target_rate_numerator": self.args.rate_numerator,
@@ -143,7 +148,7 @@ class NDIBank:
                     raise RuntimeError("restart budget exhausted")
                 self.runtime.record_restart()
             self.process = self.popen(
-                self._command(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                self._command(), stdin=subprocess.DEVNULL,
                 start_new_session=True, env=self._environment(),
             )
             self.started_at = self.clock()
@@ -249,7 +254,12 @@ def parse_args(argv=None):
 
 
 def main() -> int:
-    args = parse_args(); sources = load_sources(args.config); plugin_preflight(); bank = NDIBank(args, sources)
+    args = parse_args(); sources = load_sources(args.config)
+    if args.writer_mode == "native":
+        plugin_preflight(plugins=NATIVE_BANK_PLUGINS)
+    else:
+        plugin_preflight()
+    bank = NDIBank(args, sources)
     threading.Thread(target=bank.supervise, daemon=True).start()
     server = ThreadingHTTPServer((args.bind, args.port), handler_for_snapshot(bank.snapshot))
     def shutdown(*_unused): threading.Thread(target=server.shutdown, daemon=True).start()

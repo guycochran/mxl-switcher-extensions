@@ -138,11 +138,14 @@ Real two-camera testing separated two problems that originally looked alike:
 | Independent and GStreamer-scheduled MXL writers | 27-35% held frames; up to 28 frames of source skew |
 | Native shared-index writer | 0-1 frame of source skew; no hard MXL counter movement |
 | Native writer plus unoptimized Core | Core fell behind because it copied every 1080p v210 output twice |
-| Native writer plus bounded Core hold-cache refresh | Preliminary 30-second smoke: 2.1% held, zero skips, zero hard errors, zero restarts |
+| Native writer plus bounded Core hold-cache refresh | 120-second steady gate: 0.11% held, 0-1 frame skew, zero hard errors/restarts |
+| Preview/Cut/Take gate | 120 seconds: all three commands applied, stable output identities, 0.73% held, zero hard errors/restarts |
 
 These are prototype qualification results, not a general NDI-versus-MXL
-benchmark. The planned 120-second, recovery, audio, and endurance gates still
-control promotion.
+benchmark. The switched run's skip telemetry includes inactive source timelines
+advancing before they were selected again; no selected index regressed. The
+camera scenes did not provide enough obvious motion to close content-liveness
+acceptance. Recovery, audio, and endurance gates still control promotion.
 
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI

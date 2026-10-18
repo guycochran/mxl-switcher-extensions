@@ -6,6 +6,7 @@ import unittest
 
 from inputs.ndi.ndi_bank import (
     HISTORY_OPTION,
+    NATIVE_BANK_PLUGINS,
     NDIBank,
     load_sources,
     validate_domain_history,
@@ -108,6 +109,11 @@ class BankTests(unittest.TestCase):
         bank = NDIBank(self.args, sources, popen=FakeProcess, clock=lambda: 10.0)
         with self.assertRaisesRegex(RuntimeError, "video-only"):
             bank._command()
+
+    def test_native_plugin_set_does_not_require_superseded_writers(self):
+        self.assertIn("appsink", NATIVE_BANK_PLUGINS)
+        self.assertNotIn("mxlsink", NATIVE_BANK_PLUGINS)
+        self.assertNotIn("intervideosink", NATIVE_BANK_PLUGINS)
 
     def test_config_rejects_duplicate_flows_and_accepts_two_sources(self):
         path = self.domain / "bank.json"

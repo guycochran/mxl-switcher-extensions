@@ -236,8 +236,12 @@ def gst_command(
     return command
 
 
-def plugin_preflight(run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> None:
-    for plugin in REQUIRED_PLUGINS:
+def plugin_preflight(
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    *,
+    plugins: tuple[str, ...] = REQUIRED_PLUGINS,
+) -> None:
+    for plugin in plugins:
         try:
             done = run(
                 ["gst-inspect-1.0", plugin],
