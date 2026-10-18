@@ -9,9 +9,10 @@ camera is individually smooth.
 
 **Maturity: qualified prototype.** The optimized pipeline and bounded
 supervisor have offline coverage plus real two-camera cadence, control and
-recovery evidence. The strict endurance gate still reports input catch-up
-skips, recovery is bounded rather than seamless, and coordinated native audio
-is not implemented. Do not promote this path as production-ready yet.
+recovery evidence. The split-copy path has passed its strict clean-host video
+gate on modern cloud CPU, while recovery remains bounded rather than seamless
+and coordinated native audio is not implemented. Do not promote this path as
+production-ready yet.
 
 ## Why this module exists
 
@@ -149,6 +150,7 @@ Real two-camera testing separated two problems that originally looked alike:
 | Ten-minute steady gate | 35,850 fresh routes, 1.78% held, 0-1 frame skew and zero hard errors/restarts; strict gate failed on 99 catch-up events / 345 skipped grains |
 | Forced native-writer restart | Supervisor recovered both feeds and stable PGM/PVW identities; cohort reopen kept skew at 0-1 frame, with a visible transient disturbance |
 | ZoomISO NDI functional integration | Two registered 1080p29.97 sources advanced 2,141 grains each in 72 seconds (29.74 fps), held at 0-1 frame skew, and produced zero Core holds, hard errors, skips, catch-up ticks, restarts or active alarms |
+| Modern-CPU clean-host gate | Two direct-address 1080p29.97 sources passed a strict 60-second smoke and 180-second gate at 30.00 fps, 0-1 frame skew, zero holds, zero catch-up, zero skips and zero hard-counter movement |
 
 These are prototype qualification results, not a general NDI-versus-MXL
 benchmark. The switched run's skip telemetry includes inactive source timelines
@@ -165,6 +167,17 @@ evidence rather than a clean-host capacity benchmark. Across six samples, the
 two-source bank used 183-196% Docker CPU and about 441 MiB RSS; the isolated
 Core used 16-31% CPU and about 331 MiB RSS. A Discovery Server supplied source
 registration because the sender ran behind Docker bridge networking.
+
+The follow-up clean-host run separated the NDI sender from a private receiver
+with 16 modern vCPUs and no unrelated containers. Direct private source
+addresses avoided cross-host discovery ambiguity. During the 180-second gate,
+the two sources each advanced at 30.003 fps with at most one frame of skew;
+Core routed 10,856 selections with zero holds. The bank peaked at 173.56%
+Docker CPU and 425.9 MiB RSS, Core at 14.37% CPU and 333.1 MiB RSS, and the
+whole host retained at least 88.66% idle CPU. Every skip, catch-up, restart,
+alarm and hard-counter delta remained zero. This qualifies the experimental
+two-source video split-copy path on that host class; it does not qualify NDI
+audio, recovery, larger banks, or every NDI codec/source combination.
 
 Follow-up three-minute diagnostics confirmed that the remaining skips are
 scheduler-deadline misses on the older qualification CPU. Increasing MXL
@@ -211,7 +224,9 @@ their exact on-wire NDI modes were not captured reliably enough to support a
 codec comparison. Test-only CPU affinity and elevated CPU-share controls did
 not improve the default-placement result. Treat these as evidence of a
 copy-path and host-scheduling boundary, not as an NDI-format comparison; a
-clean-host no-skip gate still controls promotion.
+clean-host no-skip gate controlled promotion on that host. The later modern-CPU
+clean-host result passed this exact video-only contract; broader input counts,
+audio and recovery remain separate gates.
 
 The guarded, public-safe clean-host gate is documented in
 [CLEAN_HOST_QUALIFICATION.md](CLEAN_HOST_QUALIFICATION.md). Its first version
