@@ -228,6 +228,21 @@ def _paths_overlap(left: pathlib.Path, right: pathlib.Path) -> bool:
     return left == right or left in right.parents or right in left.parents
 
 
+def require_apply_privilege(euid: Callable[[], int] | None = None) -> None:
+    """Fail closed before launch unless --apply runs as root.
+
+    The bank and Core containers run as root and create root-owned flow
+    directories in the bind-mounted domain. Only root can then remove the exact
+    owned domain, so an unprivileged apply could pass the gate and still leave
+    it behind. The read-only dry preflight may run unprivileged.
+    """
+    if (euid or os.geteuid)() != 0:
+        raise QualificationError(
+            "--apply must run as root (for example with sudo): the containers create "
+            "root-owned MXL flow directories that only root can remove"
+        )
+
+
 def validate_settings(settings: Settings) -> list[str]:
     if not NAME_RE.fullmatch(settings.deployment_id):
         raise QualificationError("deployment ID must be 3-48 lowercase safe characters")
@@ -576,14 +591,22 @@ class Harness:
             try:
                 self._inspect_owned(role)
                 self.docker.mutate("rm", "--force", self.containers[role])
+                # Forget only what was verifiably removed, so a later retry (for
+                # example as root) neither re-targets nor misreports it.
+                del self.containers[role]
             except QualificationError as error:
                 errors.append(str(error))
-        if self.s.domain.exists() and not errors:
+        if (self.s.domain.exists() or self.s.domain.is_symlink()) and not errors:
             try:
+                if self.s.domain.is_symlink():
+                    raise QualificationError("domain path became a symbolic link; refusing removal")
                 marker = json.loads((self.s.domain / ".qualification-owner").read_text())
                 if marker != {"deployment_id": self.s.deployment_id, "nonce": self.owner_nonce}:
                     raise QualificationError("domain ownership changed; refusing removal")
                 shutil.rmtree(self.s.domain)
+            except PermissionError:
+                errors.append("owned MXL domain contains entries this process cannot remove; "
+                              "run --apply as root")
             except (OSError, json.JSONDecodeError, QualificationError):
                 errors.append("unable to verify or remove the owned MXL domain")
         if errors: raise QualificationError("; ".join(errors))
@@ -619,6 +642,7 @@ def main(argv: list[str] | None = None) -> int:
         plan = harness.preflight()
         if not args.apply:
             print(json.dumps(plan, indent=2, sort_keys=True)); return 0
+        require_apply_privilege()
         try:
             harness.start(); harness.wait_ready(); result = harness.qualify()
         finally:

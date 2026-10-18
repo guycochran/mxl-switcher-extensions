@@ -18,6 +18,7 @@ from inputs.ndi.qualify_clean_host import (
     evaluate_stage,
     main,
     read_host_cpu,
+    require_apply_privilege,
     timing_events,
     validate_settings,
 )
@@ -169,6 +170,70 @@ class CleanHostTests(unittest.TestCase):
             harness.cleanup()
         self.assertIn(self.settings.bank_name, docker.containers)
         self.assertTrue(self.settings.domain.exists())
+
+    def _argv(self, *extra):
+        return ["--deployment-id", "clean-test", "--bank-image", "bank:immutable",
+                "--core-image", "core:immutable", "--source-config", str(self.source_config),
+                "--core-config", str(self.core_config), "--definitions", str(self.definitions),
+                "--domain-root", str(self.domain_root), "--evidence-dir",
+                str(self.settings.evidence_dir), *extra]
+
+    def test_apply_requires_root_before_anything_is_launched(self):
+        module = "inputs.ndi.qualify_clean_host"
+        stderr = io.StringIO()
+        with mock.patch(f"{module}.os.geteuid", return_value=1000), \
+             mock.patch(f"{module}.Harness.preflight", return_value={"applied": False}), \
+             mock.patch(f"{module}.Harness.start") as start, \
+             mock.patch(f"{module}.Harness.cleanup") as cleanup, \
+             contextlib.redirect_stderr(stderr):
+            self.assertEqual(main(self._argv("--apply")), 2)
+        start.assert_not_called(); cleanup.assert_not_called()
+        self.assertIn("must run as root", stderr.getvalue())
+        self.assertFalse(self.settings.domain.exists())
+        with self.assertRaisesRegex(QualificationError, "root"):
+            require_apply_privilege(lambda: 1000)
+        require_apply_privilege(lambda: 0)
+
+    def test_dry_preflight_stays_unprivileged_and_root_apply_proceeds(self):
+        module = "inputs.ndi.qualify_clean_host"
+        with mock.patch(f"{module}.os.geteuid", return_value=1000), \
+             mock.patch(f"{module}.Harness.preflight", return_value={"applied": False}), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main(self._argv()), 0)
+        result = {"passed": True}
+        with mock.patch(f"{module}.os.geteuid", return_value=0), \
+             mock.patch(f"{module}.Harness.preflight", return_value={"applied": False}), \
+             mock.patch(f"{module}.Harness.start") as start, \
+             mock.patch(f"{module}.Harness.wait_ready"), \
+             mock.patch(f"{module}.Harness.qualify", return_value=result), \
+             mock.patch(f"{module}.Harness.cleanup") as cleanup, \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main(self._argv("--apply")), 0)
+        start.assert_called_once(); cleanup.assert_called_once()
+
+    def test_cleanup_reports_root_owned_flow_contents_without_false_success(self):
+        docker = FakeDocker(); harness = Harness(self.settings, docker=docker, port_check=lambda _url: True)
+        harness.preflight(); harness.start()
+        (self.settings.domain / "flow.mxl-flow").mkdir()   # created by a root container
+        with mock.patch("inputs.ndi.qualify_clean_host.shutil.rmtree",
+                        side_effect=PermissionError(13, "Permission denied")):
+            with self.assertRaisesRegex(QualificationError, "run --apply as root"):
+                harness.cleanup()
+        self.assertTrue(self.settings.domain.exists())
+        self.assertEqual(docker.containers, {})          # both owned containers still removed
+        harness.cleanup()                                  # as root: exact domain removed
+        self.assertFalse(self.settings.domain.exists())
+
+    def test_cleanup_refuses_a_symlinked_domain(self):
+        docker = FakeDocker(); harness = Harness(self.settings, docker=docker, port_check=lambda _url: True)
+        harness.preflight(); harness.start()
+        elsewhere = self.domain_root.parent / "elsewhere"
+        self.settings.domain.rename(elsewhere)
+        self.settings.domain.symlink_to(elsewhere, target_is_directory=True)
+        with self.assertRaisesRegex(QualificationError, "verify or remove"):
+            harness.cleanup()
+        self.assertTrue(elsewhere.is_dir())
+        self.assertTrue((elsewhere / ".qualification-owner").exists())
 
     def test_preflight_refuses_busy_host_and_occupied_port(self):
         busy = FakeDocker()
