@@ -35,7 +35,7 @@ FLOW_ACTIVE_SECONDS = 60.0
 ALLOWED_CHANNELS = (1, 2, 4, 8)
 TIMESTAMP_MODES = ("receive-time", "timestamp", "timecode", "clocked")
 REQUIRED_PLUGINS = (
-    "ndisrc", "ndisrcdemux", "queue", "valve", "watchdog", "compositor", "videorate", "videoscale",
+    "ndisrc", "ndisrcdemux", "queue", "valve", "watchdog", "appsink", "appsrc", "videorate", "videoscale",
     "videoconvert", "identity", "clocksync", "audioconvert", "audioresample", "audiorate", "mxlsink",
 )
 
@@ -135,14 +135,23 @@ def gst_command(
         ])
     if rate_mode == "normalize":
         if startup_gate:
-            # A live aggregator is the bank's frame synchronizer: after the
-            # first camera frame it emits fixed-cadence output and repeats the
-            # last picture through bounded NDI arrival stalls.
+            # Convert once into a fixed, inexpensive holding format.  The
+            # paired appsink/appsrc elements are driven by ndi_pipeline.py on
+            # one shared cadence, so a short NDI arrival stall repeats an
+            # actual last-good picture rather than emitting a GAP buffer.
             command.extend([
-                "compositor", f"name=frame_sync_{branch_name}",
-                "background=black", "force-live=true", "ignore-inactive-pads=true",
-                "latency=200000000", "max-threads=2", "!",
-                f"video/x-raw,width={width},height={height},pixel-aspect-ratio=1/1,framerate={rate}", "!",
+                "videoconvert", f"n-threads={convert_threads}", "!",
+                "videoscale", "add-borders=true", "!",
+                f"video/x-raw,format=UYVY,width={width},height={height},"
+                "pixel-aspect-ratio=1/1,interlace-mode=progressive,colorimetry=bt709",
+                "!", "appsink", f"name=frame_sync_in_{branch_name}",
+                "emit-signals=true", "sync=false", "max-buffers=1", "drop=true",
+                "appsrc", f"name=frame_sync_out_{branch_name}",
+                "is-live=true", "format=time", "do-timestamp=false", "block=false",
+                f"caps=video/x-raw,format=UYVY,width={width},height={height},"
+                f"pixel-aspect-ratio=1/1,framerate={rate},"
+                "interlace-mode=progressive,colorimetry=bt709",
+                "!",
             ])
         else:
             # Normalize cadence before the expensive scale and v210 conversion.
@@ -161,10 +170,8 @@ def gst_command(
         command.extend(["valve", f"name=startup_gate_{branch_name}", "drop=true", "!"])
     command.extend(["videoconvert", f"n-threads={convert_threads}", "!"])
     if startup_gate:
-        # force-live compositors negotiate a provisional black-frame format
-        # before the first source buffer.  Pin every writer-facing video field
-        # so the real source cannot trigger a mid-stream caps change, which
-        # mxlsink intentionally rejects.
+        # Pin every writer-facing field. mxlsink intentionally rejects
+        # mid-stream format changes.
         command.extend([
             f"video/x-raw,format=v210,width={width},height={height},"
             f"pixel-aspect-ratio=1/1,framerate={rate},"

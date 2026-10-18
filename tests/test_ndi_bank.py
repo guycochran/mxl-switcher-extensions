@@ -55,11 +55,18 @@ class BankTests(unittest.TestCase):
         self.assertIn("name=pacing_queue_demux1", command)
         self.assertIn("name=watchdog_demux0", command)
         self.assertIn("name=watchdog_demux1", command)
-        self.assertIn("name=frame_sync_demux0", command)
-        self.assertIn("name=frame_sync_demux1", command)
-        self.assertEqual(command.count("force-live=true"), 2)
+        self.assertIn("name=frame_sync_in_demux0", command)
+        self.assertIn("name=frame_sync_in_demux1", command)
+        self.assertIn("name=frame_sync_out_demux0", command)
+        self.assertIn("name=frame_sync_out_demux1", command)
+        self.assertEqual(command.count("appsink"), 2)
+        self.assertEqual(command.count("appsrc"), 2)
         self.assertEqual(
-            sum("interlace-mode=progressive,colorimetry=bt709" in token for token in command),
+            sum(
+                token.startswith("video/x-raw,format=v210")
+                and "interlace-mode=progressive,colorimetry=bt709" in token
+                for token in command
+            ),
             2,
         )
         self.assertEqual(command.count("timeout=30000"), 2)
@@ -71,7 +78,7 @@ class BankTests(unittest.TestCase):
         self.assertIn("--rate-denominator", command)
         self.assertIn("--startup-lead-frames", command)
         self.assertIn("22", command)
-        self.assertEqual(command.count("drop=true"), 2)
+        self.assertEqual(command.count("drop=true"), 4)  # two appsinks plus two valves
         self.assertNotIn("sh", command)
 
     def test_config_rejects_duplicate_flows_and_accepts_two_sources(self):

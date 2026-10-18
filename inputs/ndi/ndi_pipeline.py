@@ -8,6 +8,7 @@ import json
 import signal
 import sys
 import threading
+import time
 
 
 def description(tokens: list[str]) -> str:
@@ -53,6 +54,8 @@ def main(argv: list[str] | None = None) -> int:
 
     gates = []
     startup_probes = []
+    frame_inputs = {}
+    frame_outputs = {}
     timestamp_syncs = []
     iterator = pipeline.iterate_elements()
     while True:
@@ -62,21 +65,32 @@ def main(argv: list[str] | None = None) -> int:
                 gates.append(element)
             elif element.get_name().startswith("startup_probe_"):
                 startup_probes.append(element)
+            elif element.get_name().startswith("frame_sync_in_"):
+                frame_inputs[element.get_name().removeprefix("frame_sync_in_")] = element
+            elif element.get_name().startswith("frame_sync_out_"):
+                frame_outputs[element.get_name().removeprefix("frame_sync_out_")] = element
             elif element.get_name().startswith("timestamp_sync_"):
                 timestamp_syncs.append(element)
         elif result == Gst.IteratorResult.RESYNC:
             iterator.resync()
             gates.clear()
             startup_probes.clear()
+            frame_inputs.clear()
+            frame_outputs.clear()
             timestamp_syncs.clear()
         elif result == Gst.IteratorResult.DONE:
             break
         else:
             raise RuntimeError("could not enumerate pipeline elements")
     if gates:
+        if set(frame_inputs) != set(frame_outputs):
+            raise RuntimeError("frame synchronizer inputs and outputs do not match")
         ready: set[str] = set()
         ready_lock = threading.Lock()
         opened = threading.Event()
+        pump_stop = threading.Event()
+        latest_buffers = {}
+        buffer_lock = threading.Lock()
         frame_duration = Gst.util_uint64_scale(
             args.rate_denominator, Gst.SECOND, args.rate_numerator
         )
@@ -105,22 +119,70 @@ def main(argv: list[str] | None = None) -> int:
             )
             for gate in gates:
                 gate.set_property("drop", False)
-            opened.set()
+
+            def pump() -> None:
+                frame_number = 0
+                interval = args.rate_denominator / args.rate_numerator
+                deadline = time.monotonic()
+                while not pump_stop.is_set():
+                    delay = deadline - time.monotonic()
+                    if delay > 0 and pump_stop.wait(delay):
+                        return
+                    with buffer_lock:
+                        current = {
+                            branch: latest_buffers[branch].copy()
+                            for branch in frame_outputs
+                        }
+                    pts = timeline_epoch[0] + frame_number * frame_duration
+                    for branch, appsrc in frame_outputs.items():
+                        buffer = current[branch]
+                        buffer.pts = pts
+                        buffer.dts = Gst.CLOCK_TIME_NONE
+                        buffer.duration = frame_duration
+                        if appsrc.emit("push-buffer", buffer) != Gst.FlowReturn.OK:
+                            pump_stop.set()
+                            return
+                    frame_number += 1
+                    deadline += interval
+                    if deadline < time.monotonic() - interval:
+                        deadline = time.monotonic()
+
+            threading.Thread(target=pump, daemon=True).start()
 
         def observe(_pad, info, gate):
             if info.type & Gst.PadProbeType.BUFFER:
                 with ready_lock:
                     ready.add(gate.get_name())
                     if len(ready) == len(startup_probes) and not opened.is_set():
+                        opened.set()
                         threading.Thread(target=open_all, daemon=True).start()
             return Gst.PadProbeReturn.OK
 
-        for startup_probe in startup_probes:
-            startup_probe.get_static_pad("sink").add_probe(
-                Gst.PadProbeType.BUFFER, observe, startup_probe
-            )
+        if frame_inputs:
+            def sample_ready(appsink, branch):
+                sample = appsink.emit("pull-sample")
+                if sample is None or sample.get_buffer() is None:
+                    return Gst.FlowReturn.ERROR
+                with buffer_lock:
+                    latest_buffers[branch] = sample.get_buffer().copy()
+                with ready_lock:
+                    ready.add(branch)
+                    if len(ready) == len(frame_inputs) and not opened.is_set():
+                        opened.set()
+                        threading.Thread(target=open_all, daemon=True).start()
+                return Gst.FlowReturn.OK
+
+            for branch, appsink in frame_inputs.items():
+                appsink.connect("new-sample", sample_ready, branch)
+        else:
+            for startup_probe in startup_probes:
+                startup_probe.get_static_pad("sink").add_probe(
+                    Gst.PadProbeType.BUFFER, observe, startup_probe
+                )
 
     def stop(*_unused) -> None:
+        if gates:
+            pump_stop.set()
         pipeline.send_event(Gst.Event.new_eos())
 
     signal.signal(signal.SIGTERM, stop)
@@ -144,6 +206,10 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
             flush=True,
         )
+    if gates:
+        pump_stop.set()
+        for appsrc in frame_outputs.values():
+            appsrc.emit("end-of-stream")
     pipeline.set_state(Gst.State.NULL)
     return 1 if failed else 0
 
