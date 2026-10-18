@@ -178,6 +178,17 @@ def gst_command(
             "queue", f"name=writer_queue_{branch_name}",
             "max-size-buffers=4", "max-size-time=0", "max-size-bytes=0", "!",
         ])
+        if pacing_mode == "retimestamp-clock-sync":
+            command.extend([
+                "identity", f"name=timestamp_sync_{branch_name}",
+                f"datarate={_v210_datarate(width, height, rate_numerator, rate_denominator)}",
+                "single-segment=true", "!",
+            ])
+        if pacing_mode in {"clock-sync", "retimestamp-clock-sync"}:
+            command.extend([
+                "clocksync", f"name=clock_sync_{branch_name}",
+                "sync-to-first=false", "!",
+            ])
     if not bank_frame_sync:
         command.extend(["videoconvert", f"n-threads={convert_threads}", "!"])
         if startup_gate:
