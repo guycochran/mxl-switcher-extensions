@@ -164,7 +164,14 @@ def main(argv: list[str] | None = None) -> int:
                 if sample is None or sample.get_buffer() is None:
                     return Gst.FlowReturn.ERROR
                 with buffer_lock:
+                    first = branch not in latest_buffers
                     latest_buffers[branch] = sample.get_buffer().copy()
+                if first:
+                    print(
+                        f"NDI frame synchronizer ready: {branch}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                 with ready_lock:
                     ready.add(branch)
                     if len(ready) == len(frame_inputs) and not opened.is_set():

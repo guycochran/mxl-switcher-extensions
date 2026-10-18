@@ -145,7 +145,8 @@ def gst_command(
                 f"video/x-raw,format=UYVY,width={width},height={height},"
                 "pixel-aspect-ratio=1/1,interlace-mode=progressive,colorimetry=bt709",
                 "!", "appsink", f"name=frame_sync_in_{branch_name}",
-                "emit-signals=true", "sync=false", "max-buffers=1", "drop=true",
+                "emit-signals=true", "sync=false", "async=false",
+                "max-buffers=1", "drop=true",
                 "appsrc", f"name=frame_sync_out_{branch_name}",
                 "is-live=true", "format=time", "do-timestamp=false", "block=false",
                 f"caps=video/x-raw,format=UYVY,width={width},height={height},"

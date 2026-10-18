@@ -61,6 +61,7 @@ class BankTests(unittest.TestCase):
         self.assertIn("name=frame_sync_out_demux1", command)
         self.assertEqual(command.count("appsink"), 2)
         self.assertEqual(command.count("appsrc"), 2)
+        self.assertEqual(command.count("async=false"), 2)
         self.assertEqual(
             sum(
                 token.startswith("video/x-raw,format=v210")
