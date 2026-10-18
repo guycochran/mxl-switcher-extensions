@@ -210,7 +210,11 @@ the second commit terminates the child and reports an explicit partial-commit
 error because the first publication cannot be rolled back. An isolated runtime
 ABI smoke confirmed that two distinct writer handles can each hold one open
 grain concurrently. This mode remains off by default until it passes the same
-clean-host no-skip gate.
+clean-host no-skip gate. Its first 60-second mixed-source live smoke was a
+decisive no-go: 86 skip events / 161 skipped grains, versus three events / 39
+grains for the split-payload helper under the comparable default placement.
+The source-pair branch is retained as negative evidence and must not be merged
+or deployed without a new design review and clean qualification.
 
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI
