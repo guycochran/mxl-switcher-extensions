@@ -7,9 +7,11 @@ index on each tick. Independent per-camera writers are not a supported switcher
 topology: live qualification showed their indexes can diverge even when each
 camera is individually smooth.
 
-**Maturity: prototype.** The optimized pipeline and bounded supervisor have
-offline coverage. Real-camera cadence, timestamp selection, recovery and
-endurance qualification are still required before production use.
+**Maturity: qualified prototype.** The optimized pipeline and bounded
+supervisor have offline coverage plus real two-camera cadence, control and
+recovery evidence. The strict endurance gate still reports input catch-up
+skips, recovery is bounded rather than seamless, and coordinated native audio
+is not implemented. Do not promote this path as production-ready yet.
 
 ## Why this module exists
 
@@ -140,12 +142,17 @@ Real two-camera testing separated two problems that originally looked alike:
 | Native writer plus unoptimized Core | Core fell behind because it copied every 1080p v210 output twice |
 | Native writer plus bounded Core hold-cache refresh | 120-second steady gate: 0.11% held, 0-1 frame skew, zero hard errors/restarts |
 | Preview/Cut/Take gate | 120 seconds: all three commands applied, stable output identities, 0.73% held, zero hard errors/restarts |
+| Ten-minute steady gate | 35,850 fresh routes, 1.78% held, 0-1 frame skew and zero hard errors/restarts; strict gate failed on 99 catch-up events / 345 skipped grains |
+| Forced native-writer restart | Supervisor recovered both feeds and stable PGM/PVW identities; cohort reopen kept skew at 0-1 frame, with a visible transient disturbance |
 
 These are prototype qualification results, not a general NDI-versus-MXL
 benchmark. The switched run's skip telemetry includes inactive source timelines
 advancing before they were selected again; no selected index regressed. The
 camera scenes did not provide enough obvious motion to close content-liveness
-acceptance. Recovery, audio, and endurance gates still control promotion.
+acceptance. The forced restart produced 23 early reads, four transient
+unavailable-alarm events and eight catch-up events / 42 grains; active alarms
+cleared and no selected index regressed. Audio and a strict no-skip endurance
+result still control promotion.
 
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI

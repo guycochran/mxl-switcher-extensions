@@ -32,6 +32,10 @@ shared-index smoke reduced skew to 0-1 frame. Core then exposed a separate
 single-thread memory-copy bottleneck; refreshing its freeze-frame cache once
 per second instead of on every routed frame reduced a subsequent real-camera
 smoke to 2.1 percent held frames with zero skips and zero hard errors.
+A later ten-minute run held 1.78 percent with 0-1 frame skew and zero hard
+errors, but failed the strict no-skip criterion with 99 catch-up events / 345
+grains. Treat CPU and memory budgets as met only provisionally until that
+catch-up behavior is closed on the reference host.
 
 ## Delivery stages
 
@@ -54,6 +58,12 @@ condition above.
 Independently exercise sender stop/start, discovery loss, direct-address
 reconnect, module restart and Core restart. The configured MXL identities remain
 stable and unrelated services do not restart. Restart exhaustion fails closed.
+
+The first forced native-writer restart recovered automatically and preserved
+stable Program/Preview identities. Core now retires a selected reader cohort
+together when one bank flow is replaced, which removed the mixed-generation
+epoch-skew spike. Recovery still causes a visible bounded disturbance and is
+not seamless redundancy; sender/discovery and restart-exhaustion cases remain.
 
 ### 4. Audio
 
@@ -83,5 +93,6 @@ same explicit MXL grain index for every flow. This preserves the portable NDI
 plugin boundary while making multi-flow cadence deterministic.
 
 Do not return to independent `mxlsink` tuning unless new evidence disproves the
-shared-index result. The remaining qualification work is lifecycle/recovery,
-native audio, and 10-minute/30-minute/eight-hour endurance in that order.
+shared-index result. The remaining qualification work is closing steady-state
+catch-up skips, the remaining lifecycle matrix, native audio, and then a clean
+10-minute/30-minute/eight-hour endurance sequence.
