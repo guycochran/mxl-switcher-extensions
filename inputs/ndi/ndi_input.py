@@ -149,7 +149,8 @@ def gst_command(
                 "emit-signals=true", "sync=false", "async=false",
                 "max-buffers=1", "drop=true",
                 "appsrc", f"name=frame_sync_out_{branch_name}",
-                "is-live=true", "format=time", "do-timestamp=false", "block=false",
+                "is-live=true", "format=time", "do-timestamp=false",
+                "block=true", "max-buffers=1",
                 f"caps=video/x-raw,format=v210,width={width},height={height},"
                 f"pixel-aspect-ratio=1/1,framerate={rate},"
                 "interlace-mode=progressive,colorimetry=bt709",

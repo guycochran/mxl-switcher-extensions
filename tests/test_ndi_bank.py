@@ -63,6 +63,8 @@ class BankTests(unittest.TestCase):
         self.assertEqual(command.count("appsink"), 2)
         self.assertEqual(command.count("appsrc"), 2)
         self.assertEqual(command.count("async=false"), 2)
+        self.assertEqual(command.count("block=true"), 2)
+        self.assertEqual(command.count("max-buffers=1"), 4)
         self.assertEqual(
             sum(
                 token.startswith("video/x-raw,format=v210")
