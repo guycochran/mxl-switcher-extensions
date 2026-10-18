@@ -126,10 +126,11 @@ def main(argv: list[str] | None = None) -> int:
                 if appsrc.emit("push-buffer", primer) != Gst.FlowReturn.OK:
                     pump_stop.set()
                     return
-            _change, current, _pending = pipeline.get_state(10 * Gst.SECOND)
-            if current != Gst.State.PLAYING:
-                pump_stop.set()
-                return
+            # The live appsrc branches need a real buffer to complete the
+            # PAUSED-to-PLAYING transition, so waiting for PLAYING here would
+            # deadlock.  The closed-valve primer above establishes fixed caps;
+            # the scheduled stream below completes the live transition.
+            time.sleep(0.05)
             # All bank branches start their fixed-cadence timeline on one
             # pipeline-clock boundary.  Per-branch sync-to-first offsets would
             # preserve each receiver's arbitrary arrival phase.
