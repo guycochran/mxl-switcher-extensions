@@ -159,10 +159,20 @@ def gst_command(
         ])
     if startup_gate:
         command.extend(["valve", f"name=startup_gate_{branch_name}", "drop=true", "!"])
-    command.extend([
-        "videoconvert", f"n-threads={convert_threads}", "!",
-        "video/x-raw,format=v210", "!",
-    ])
+    command.extend(["videoconvert", f"n-threads={convert_threads}", "!"])
+    if startup_gate:
+        # force-live compositors negotiate a provisional black-frame format
+        # before the first source buffer.  Pin every writer-facing video field
+        # so the real source cannot trigger a mid-stream caps change, which
+        # mxlsink intentionally rejects.
+        command.extend([
+            f"video/x-raw,format=v210,width={width},height={height},"
+            f"pixel-aspect-ratio=1/1,framerate={rate},"
+            "interlace-mode=progressive,colorimetry=bt709",
+            "!",
+        ])
+    else:
+        command.extend(["video/x-raw,format=v210", "!"])
     if pacing_mode == "retimestamp-clock-sync":
         command.extend([
             "identity",

@@ -58,6 +58,10 @@ class BankTests(unittest.TestCase):
         self.assertIn("name=frame_sync_demux0", command)
         self.assertIn("name=frame_sync_demux1", command)
         self.assertEqual(command.count("force-live=true"), 2)
+        self.assertEqual(
+            sum("interlace-mode=progressive,colorimetry=bt709" in token for token in command),
+            2,
+        )
         self.assertEqual(command.count("timeout=30000"), 2)
         self.assertEqual(command.count("max-size-buffers=12"), 2)
         self.assertEqual(command.count("min-threshold-buffers=6"), 2)
