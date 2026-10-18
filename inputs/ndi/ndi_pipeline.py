@@ -135,7 +135,15 @@ def main(argv: list[str] | None = None) -> int:
     failed = message.type == Gst.MessageType.ERROR
     if failed:
         error, _debug = message.parse_error()
-        print(f"NDI pipeline error: {error}", file=sys.stderr, flush=True)
+        # Element names and GStreamer error domains are safe operational
+        # diagnostics.  Do not print the debug string: source elements may
+        # include credentialed or private addresses in it.
+        source = message.src.get_name() if message.src is not None else "unknown"
+        print(
+            f"NDI pipeline error from {source}: {error}",
+            file=sys.stderr,
+            flush=True,
+        )
     pipeline.set_state(Gst.State.NULL)
     return 1 if failed else 0
 
