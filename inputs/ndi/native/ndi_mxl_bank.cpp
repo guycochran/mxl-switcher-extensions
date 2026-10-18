@@ -398,7 +398,13 @@ class Input {
         ",pixel-aspect-ratio=1/1,framerate=" + std::to_string(rate_num) + "/" +
         std::to_string(rate_den) +
         ",interlace-mode=progressive,colorimetry=bt709 ! "
-        "appsink name=bank_sink sync=false max-buffers=2 drop=true";
+        "appsink name=bank_sink sync=false max-buffers=2 drop=true "
+        // Native bank audio publication is intentionally still disabled, but
+        // multiplexed NDI sources (including ZoomISO) must have their audio
+        // pad linked.  Otherwise GStreamer stops the entire source with
+        // GST_FLOW_NOT_LINKED before the video bank can consume frames.
+        "d.audio ! queue max-size-buffers=32 max-size-time=0 max-size-bytes=0 "
+        "leaky=downstream ! fakesink sync=false async=false";
     GError* error = nullptr;
     pipeline_ = gst_parse_launch(pipeline.c_str(), &error);
     if (pipeline_ == nullptr || error != nullptr) {

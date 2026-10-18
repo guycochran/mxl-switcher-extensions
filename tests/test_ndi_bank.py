@@ -166,6 +166,12 @@ class BankTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "video-only"):
             bank._command()
 
+    def test_native_video_bank_drains_multiplexed_source_audio(self):
+        source = (pathlib.Path(__file__).resolve().parents[1]
+                  / "inputs" / "ndi" / "native" / "ndi_mxl_bank.cpp").read_text()
+        self.assertIn("d.audio ! queue", source)
+        self.assertIn("leaky=downstream ! fakesink sync=false async=false", source)
+
     def test_native_plugin_set_does_not_require_superseded_writers(self):
         self.assertIn("appsink", NATIVE_BANK_PLUGINS)
         self.assertNotIn("mxlsink", NATIVE_BANK_PLUGINS)

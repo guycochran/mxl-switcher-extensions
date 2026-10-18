@@ -112,6 +112,10 @@ neither the native process nor the health API prints them. The native bank
 currently requires `audio_mode: "disabled"`; it fails closed for audio instead
 of silently publishing an unqualified path. Use the single-input module for
 audio experiments until coordinated native audio is implemented and accepted.
+`disabled` means that the bank does not publish an MXL audio flow. It still
+drains an NDI sender's multiplexed audio pad through a bounded discard branch;
+leaving that pad unlinked can stop the sender with `GST_FLOW_NOT_LINKED` before
+its video reaches the bank.
 
 `passthrough` fails closed unless every sender already matches the requested
 geometry and frame rate. Use `normalize` for mixed senders, accepting its added
@@ -144,6 +148,7 @@ Real two-camera testing separated two problems that originally looked alike:
 | Preview/Cut/Take gate | 120 seconds: all three commands applied, stable output identities, 0.73% held, zero hard errors/restarts |
 | Ten-minute steady gate | 35,850 fresh routes, 1.78% held, 0-1 frame skew and zero hard errors/restarts; strict gate failed on 99 catch-up events / 345 skipped grains |
 | Forced native-writer restart | Supervisor recovered both feeds and stable PGM/PVW identities; cohort reopen kept skew at 0-1 frame, with a visible transient disturbance |
+| ZoomISO NDI functional integration | Two registered 1080p29.97 sources advanced 2,141 grains each in 72 seconds (29.74 fps), held at 0-1 frame skew, and produced zero Core holds, hard errors, skips, catch-up ticks, restarts or active alarms |
 
 These are prototype qualification results, not a general NDI-versus-MXL
 benchmark. The switched run's skip telemetry includes inactive source timelines
@@ -153,6 +158,13 @@ acceptance. The forced restart produced 23 early reads, four transient
 unavailable-alarm events and eight catch-up events / 42 grains; active alarms
 cleared and no selected index regressed. Audio and a strict no-skip endurance
 result still control promotion.
+
+The ZoomISO integration run used a shared cloud host that was also running the
+licensed sender and unrelated services, so it is functional compatibility
+evidence rather than a clean-host capacity benchmark. Across six samples, the
+two-source bank used 183-196% Docker CPU and about 441 MiB RSS; the isolated
+Core used 16-31% CPU and about 331 MiB RSS. A Discovery Server supplied source
+registration because the sender ran behind Docker bridge networking.
 
 Follow-up three-minute diagnostics confirmed that the remaining skips are
 scheduler-deadline misses on the older qualification CPU. Increasing MXL
