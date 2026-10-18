@@ -110,9 +110,22 @@ def main(argv: list[str] | None = None) -> int:
 
         def open_all() -> None:
             # appsinks may deliver preroll while the pipeline is still moving
-            # from PAUSED to PLAYING.  Do not push the first appsrc buffer
-            # until downstream caps negotiation and live-state propagation
-            # have completed.
+            # from PAUSED to PLAYING. Prime each closed output valve once so
+            # appsrc can propagate its fixed caps without creating an MXL
+            # writer or exposing an unsynchronised frame.
+            with buffer_lock:
+                primers = {
+                    branch: latest_buffers[branch].copy()
+                    for branch in frame_outputs
+                }
+            for branch, appsrc in frame_outputs.items():
+                primer = primers[branch]
+                primer.pts = 0
+                primer.dts = Gst.CLOCK_TIME_NONE
+                primer.duration = frame_duration
+                if appsrc.emit("push-buffer", primer) != Gst.FlowReturn.OK:
+                    pump_stop.set()
+                    return
             _change, current, _pending = pipeline.get_state(10 * Gst.SECOND)
             if current != Gst.State.PLAYING:
                 pump_stop.set()
