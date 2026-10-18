@@ -4,7 +4,12 @@ import pathlib
 import tempfile
 import unittest
 
-from inputs.ndi.ndi_bank import NDIBank, load_sources
+from inputs.ndi.ndi_bank import (
+    HISTORY_OPTION,
+    NDIBank,
+    load_sources,
+    validate_domain_history,
+)
 
 
 class FakeProcess:
@@ -46,6 +51,9 @@ class BankTests(unittest.TestCase):
         self.assertEqual(command.count("sync-to-first=false"), 2)
         self.assertIn("name=pacing_queue_demux0", command)
         self.assertIn("name=pacing_queue_demux1", command)
+        self.assertIn("name=watchdog_demux0", command)
+        self.assertIn("name=watchdog_demux1", command)
+        self.assertEqual(command.count("timeout=30000"), 2)
         self.assertEqual(command.count("max-size-buffers=12"), 2)
         self.assertEqual(command.count("min-threshold-buffers=6"), 2)
         self.assertEqual(command.count("max-size-buffers=30"), 2)
@@ -73,6 +81,16 @@ class BankTests(unittest.TestCase):
         self.assertNotIn("CAMERA B", state)
         self.assertNotIn("video-a", state)
         self.assertIn('"configured_inputs": 2', state)
+
+    def test_bank_requires_one_second_domain_history(self):
+        options = self.domain / "options.json"
+        with self.assertRaisesRegex(RuntimeError, "missing or invalid"):
+            validate_domain_history(self.domain, 1_000_000_000)
+        options.write_text(json.dumps({HISTORY_OPTION: 200_000_000}))
+        with self.assertRaisesRegex(RuntimeError, "at least"):
+            validate_domain_history(self.domain, 1_000_000_000)
+        options.write_text(json.dumps({HISTORY_OPTION: 1_000_000_000}))
+        validate_domain_history(self.domain, 1_000_000_000)
 
 
 if __name__ == "__main__": unittest.main()

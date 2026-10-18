@@ -35,7 +35,7 @@ FLOW_ACTIVE_SECONDS = 60.0
 ALLOWED_CHANNELS = (1, 2, 4, 8)
 TIMESTAMP_MODES = ("receive-time", "timestamp", "timecode", "clocked")
 REQUIRED_PLUGINS = (
-    "ndisrc", "ndisrcdemux", "queue", "valve", "videorate", "videoscale",
+    "ndisrc", "ndisrcdemux", "queue", "valve", "watchdog", "videorate", "videoscale",
     "videoconvert", "identity", "clocksync", "audioconvert", "audioresample", "audiorate", "mxlsink",
 )
 
@@ -161,6 +161,7 @@ def gst_command(
                 f"max-size-buffers={BANK_PACING_QUEUE_BUFFERS}",
                 f"min-threshold-buffers={BANK_PACING_QUEUE_PREROLL}",
                 "max-size-time=0", "max-size-bytes=0", "!",
+                "watchdog", f"name=watchdog_{branch_name}", "timeout=30000", "!",
             ])
     if pacing_mode in {"clock-sync", "retimestamp-clock-sync"}:
         if startup_gate:

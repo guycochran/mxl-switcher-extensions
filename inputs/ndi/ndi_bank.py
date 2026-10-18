@@ -26,6 +26,21 @@ from inputs.ndi.ndi_input import (
     plugin_preflight,
 )
 
+HISTORY_OPTION = "urn:x-mxl:option:history_duration/v1.0"
+MINIMUM_HISTORY_NS = 1_000_000_000
+
+
+def validate_domain_history(domain: pathlib.Path, minimum_ns: int) -> None:
+    try:
+        options = json.loads((domain / "options.json").read_text(encoding="utf-8"))
+        configured = options.get(HISTORY_OPTION)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeError("MXL domain options.json is missing or invalid") from exc
+    if not isinstance(configured, (int, float)) or isinstance(configured, bool) or configured < minimum_ns:
+        raise RuntimeError(
+            f"MXL domain history duration must be at least {minimum_ns} ns"
+        )
+
 
 class NDIBank:
     def __init__(self, args: argparse.Namespace, sources: list[dict], *, popen=subprocess.Popen, clock=time.monotonic):
@@ -95,6 +110,10 @@ class NDIBank:
             if not self.args.domain.is_dir():
                 self.runtime.transition("failed", error="MXL domain is unavailable")
                 raise RuntimeError("MXL domain is unavailable")
+            validate_domain_history(
+                self.args.domain,
+                getattr(self.args, "minimum_history_ns", MINIMUM_HISTORY_NS),
+            )
             if restart:
                 if not self.budget.claim():
                     self.runtime.transition("failed", error="restart budget exhausted")
@@ -194,9 +213,12 @@ def parse_args(argv=None):
     parser.add_argument("--bind", default="127.0.0.1"); parser.add_argument("--port", type=int, default=18130)
     parser.add_argument("--poll-seconds", type=float, default=1.0); parser.add_argument("--stop-timeout-seconds", type=float, default=5.0)
     parser.add_argument("--max-restarts", type=int, default=3); parser.add_argument("--restart-window-seconds", type=float, default=60.0)
+    parser.add_argument("--minimum-history-ns", type=int, default=MINIMUM_HISTORY_NS)
     args = parser.parse_args(argv)
     if args.bind not in {"127.0.0.1", "::1", "localhost"}:
         parser.error("health bind must remain loopback-only")
+    if args.minimum_history_ns < MINIMUM_HISTORY_NS:
+        parser.error(f"minimum history must be at least {MINIMUM_HISTORY_NS} ns")
     return args
 
 

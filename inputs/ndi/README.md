@@ -18,11 +18,16 @@ normalizing its frame rate. A 60 fps camera therefore paid for 60 expensive
 conversions even when the production system needed 30 fps. Receive-time
 timestamps also turned network arrival jitter into uneven MXL commits.
 
-This module deliberately orders the video path as:
+The single-input path deliberately orders video as:
 
 ```text
 NDI decode -> bounded queue -> videorate -> scale -> threaded v210 conversion -> MXL
 ```
+
+The multi-input bank adds coordinated startup, a shared frame epoch, and a
+post-conversion pacing reservoir. Those pieces turn independently timed,
+bursty NDI receivers into clock-aligned MXL writers at the cost of bounded
+latency and memory.
 
 The audio path drains NDI independently and normalizes it to interleaved
 Float32 at 48 kHz. Audio may be required, optional, or disabled.
@@ -61,6 +66,18 @@ docker run --rm --network host \
 
 ## Multi-input bank (recommended for switching)
 
+Create the domain with at least one second of MXL history **before any MXL
+process opens it**. The bank fails closed when this option is absent or too
+small; the SDK's 200 ms default does not provide enough switcher history for
+bursty contribution sources.
+
+```sh
+mkdir -p /dev/shm/mxl-ndi
+printf '%s\n' \
+  '{"urn:x-mxl:option:history_duration/v1.0":1000000000}' \
+  > /dev/shm/mxl-ndi/options.json
+```
+
 Create a private `bank.json` (do not commit real camera addresses):
 
 ```json
@@ -81,14 +98,27 @@ docker run --rm --network host \
   --entrypoint python3 mxl-ndi-input:prototype \
   /opt/mxl-switcher-extensions/inputs/ndi/ndi_bank.py \
   --domain /mxl-domain --config /run/ndi-bank.json \
-  --rate-mode passthrough --timestamp-mode receive-time \
+  --rate-mode normalize --timestamp-mode receive-time \
   --pacing-mode retimestamp-clock-sync --port 18130
 ```
 
 `passthrough` fails closed unless every sender already matches the requested
 geometry and frame rate. Use `normalize` for mixed senders, accepting its added
-CPU cost. The health API reports counts only; it never returns source names,
+CPU cost. Bank mode deliberately prerolls converted frames before clock pacing;
+budget roughly 0.7 seconds of contribution latency plus the downstream Core
+input delay. The health API reports counts only; it never returns source names,
 addresses, or flow IDs.
+
+Each bank branch also has a 30-second media watchdog. A receiver that stops
+delivering buffers terminates the shared pipeline, makes readiness fail, and
+enters the supervisor's bounded restart policy instead of leaving a frozen
+source falsely marked healthy.
+
+On the older dual-Xeon qualification host, input heads committed about four
+frames behind the current TAI index. A downstream Core delay of six frames
+provided the measured safety margin. Treat that as a starting profile, not a
+universal constant: qualify the head-to-TAI offset on each host and retain at
+least two frames of additional margin inside the configured MXL history.
 
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI
@@ -135,6 +165,6 @@ before becoming a deployment default.
 ## Tests
 
 ```sh
-python3 -m unittest tests.test_ndi_input -v
+python3 -m unittest tests.test_ndi_input tests.test_ndi_bank -v
 make test
 ```
