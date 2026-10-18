@@ -134,11 +134,18 @@ def main(argv: list[str] | None = None) -> int:
             # All bank branches start their fixed-cadence timeline on one
             # pipeline-clock boundary.  Per-branch sync-to-first offsets would
             # preserve each receiver's arbitrary arrival phase.
-            clock = pipeline.get_clock()
-            running_time = clock.get_time() - pipeline.get_base_time()
-            timeline_epoch[0] = (
-                running_time + args.startup_lead_frames * frame_duration
-            )
+            if frame_outputs:
+                # The live appsrc branches complete the transition to PLAYING
+                # with their first scheduled buffer.  Before that transition
+                # the pipeline base time is not valid, so deriving running
+                # time from it can underflow into an unusable timestamp.
+                timeline_epoch[0] = 0
+            else:
+                clock = pipeline.get_clock()
+                running_time = clock.get_time() - pipeline.get_base_time()
+                timeline_epoch[0] = (
+                    running_time + args.startup_lead_frames * frame_duration
+                )
             for gate in gates:
                 gate.set_property("drop", False)
 
