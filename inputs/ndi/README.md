@@ -200,6 +200,14 @@ not improve the default-placement result. Treat these as evidence of a
 copy-path and host-scheduling boundary, not as an NDI-format comparison; a
 clean-host no-skip gate still controls promotion.
 
+The guarded, public-safe clean-host gate is documented in
+[CLEAN_HOST_QUALIFICATION.md](CLEAN_HOST_QUALIFICATION.md). Its first version
+is intentionally limited to two video-only native-bank inputs with
+`--copy-workers 1`. It runs a strict 60-second smoke and proceeds to a
+180-second gate only after the smoke passes. A passing run is evidence for this
+experimental copy path on that host; it does not make the helper a deployment
+default or qualify NDI audio.
+
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI
 Discovery Server configuration remains an NDI-runtime concern and can be
