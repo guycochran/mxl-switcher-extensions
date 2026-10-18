@@ -25,9 +25,11 @@ NDI decode -> bounded queue -> videorate -> scale -> threaded v210 conversion ->
 ```
 
 The multi-input bank adds coordinated startup, a shared frame epoch, and a
-post-conversion pacing reservoir. Those pieces turn independently timed,
+per-input live frame synchronizer ahead of a post-conversion pacing reservoir.
+The frame synchronizer emits fixed-cadence video and repeats the last picture
+through short arrival stalls. Together those pieces turn independently timed,
 bursty NDI receivers into clock-aligned MXL writers at the cost of bounded
-latency and memory.
+latency, CPU and memory.
 
 The audio path drains NDI independently and normalizes it to interleaved
 Float32 at 48 kHz. Audio may be required, optional, or disabled.

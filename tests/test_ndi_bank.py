@@ -29,7 +29,7 @@ class BankTests(unittest.TestCase):
         ]
         self.args = argparse.Namespace(
             domain=self.domain, width=1920, height=1080, rate_numerator=30, rate_denominator=1,
-            rate_mode="passthrough", timestamp_mode="receive-time",
+            rate_mode="normalize", timestamp_mode="receive-time",
             pacing_mode="retimestamp-clock-sync", convert_threads=4,
             max_restarts=1, restart_window_seconds=60.0, poll_seconds=0.01,
             stop_timeout_seconds=0.1,
@@ -53,6 +53,8 @@ class BankTests(unittest.TestCase):
         self.assertIn("name=pacing_queue_demux1", command)
         self.assertIn("name=watchdog_demux0", command)
         self.assertIn("name=watchdog_demux1", command)
+        self.assertIn("name=frame_sync_demux0", command)
+        self.assertIn("name=frame_sync_demux1", command)
         self.assertEqual(command.count("timeout=30000"), 2)
         self.assertEqual(command.count("max-size-buffers=12"), 2)
         self.assertEqual(command.count("min-threshold-buffers=6"), 2)
