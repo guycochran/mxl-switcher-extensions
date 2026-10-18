@@ -188,8 +188,17 @@ shows payload copy consuming most of the frame period. One persistent helper
 copies the second half of each payload while the coordinator copies the first.
 The helper never calls GStreamer or MXL; grain open, commit, and the shared
 index remain on the coordinator. The default is `0`, preserving the qualified
-serial-copy path until a live A/B gate proves an improvement on the target
-host.
+serial-copy path.
+
+On the older shared qualification host, a three-minute mixed-source A/B reduced
+the held-frame ratio from 8.67% to 0.58% and catch-up ticks from 3,659 to 259,
+with no hard-counter movement or restart. It still produced six skip events / 60
+skipped grains, so the helper remains experimental and is not a deployment
+default. Duplicated full-bandwidth and HX2 source controls also missed strict
+no-skip acceptance. Test-only CPU affinity and elevated CPU-share controls did
+not improve the default-placement result. Treat these as evidence of a
+copy-path and host-scheduling boundary, not as an NDI-format comparison; a
+clean-host no-skip gate still controls promotion.
 
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI
