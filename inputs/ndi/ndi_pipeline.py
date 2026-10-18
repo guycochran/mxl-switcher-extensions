@@ -8,7 +8,6 @@ import json
 import signal
 import sys
 import threading
-import time
 
 
 def description(tokens: list[str]) -> str:
@@ -54,8 +53,6 @@ def main(argv: list[str] | None = None) -> int:
 
     gates = []
     startup_probes = []
-    frame_inputs = {}
-    frame_outputs = {}
     timestamp_syncs = []
     iterator = pipeline.iterate_elements()
     while True:
@@ -65,32 +62,21 @@ def main(argv: list[str] | None = None) -> int:
                 gates.append(element)
             elif element.get_name().startswith("startup_probe_"):
                 startup_probes.append(element)
-            elif element.get_name().startswith("frame_sync_in_"):
-                frame_inputs[element.get_name().removeprefix("frame_sync_in_")] = element
-            elif element.get_name().startswith("frame_sync_out_"):
-                frame_outputs[element.get_name().removeprefix("frame_sync_out_")] = element
             elif element.get_name().startswith("timestamp_sync_"):
                 timestamp_syncs.append(element)
         elif result == Gst.IteratorResult.RESYNC:
             iterator.resync()
             gates.clear()
             startup_probes.clear()
-            frame_inputs.clear()
-            frame_outputs.clear()
             timestamp_syncs.clear()
         elif result == Gst.IteratorResult.DONE:
             break
         else:
             raise RuntimeError("could not enumerate pipeline elements")
     if gates:
-        if set(frame_inputs) != set(frame_outputs):
-            raise RuntimeError("frame synchronizer inputs and outputs do not match")
         ready: set[str] = set()
         ready_lock = threading.Lock()
         opened = threading.Event()
-        pump_stop = threading.Event()
-        latest_buffers = {}
-        buffer_lock = threading.Lock()
         frame_duration = Gst.util_uint64_scale(
             args.rate_denominator, Gst.SECOND, args.rate_numerator
         )
@@ -109,74 +95,16 @@ def main(argv: list[str] | None = None) -> int:
             timestamp_sync.connect("handoff", retimestamp)
 
         def open_all() -> None:
-            # appsinks may deliver preroll while the pipeline is still moving
-            # from PAUSED to PLAYING. Prime each closed output valve once so
-            # appsrc can propagate its fixed caps without creating an MXL
-            # writer or exposing an unsynchronised frame.
-            with buffer_lock:
-                primers = {
-                    branch: latest_buffers[branch].copy()
-                    for branch in frame_outputs
-                }
-            for branch, appsrc in frame_outputs.items():
-                primer = primers[branch]
-                primer.pts = 0
-                primer.dts = Gst.CLOCK_TIME_NONE
-                primer.duration = frame_duration
-                if appsrc.emit("push-buffer", primer) != Gst.FlowReturn.OK:
-                    pump_stop.set()
-                    return
-            # The live appsrc branches need a real buffer to complete the
-            # PAUSED-to-PLAYING transition, so waiting for PLAYING here would
-            # deadlock.  The closed-valve primer above establishes fixed caps;
-            # the scheduled stream below completes the live transition.
-            time.sleep(0.05)
             # All bank branches start their fixed-cadence timeline on one
             # pipeline-clock boundary.  Per-branch sync-to-first offsets would
             # preserve each receiver's arbitrary arrival phase.
-            if frame_outputs:
-                # The live appsrc branches complete the transition to PLAYING
-                # with their first scheduled buffer.  Before that transition
-                # the pipeline base time is not valid, so deriving running
-                # time from it can underflow into an unusable timestamp.
-                timeline_epoch[0] = 0
-            else:
-                clock = pipeline.get_clock()
-                running_time = clock.get_time() - pipeline.get_base_time()
-                timeline_epoch[0] = (
-                    running_time + args.startup_lead_frames * frame_duration
-                )
+            clock = pipeline.get_clock()
+            running_time = clock.get_time() - pipeline.get_base_time()
+            timeline_epoch[0] = (
+                running_time + args.startup_lead_frames * frame_duration
+            )
             for gate in gates:
                 gate.set_property("drop", False)
-
-            def pump() -> None:
-                frame_number = 0
-                interval = args.rate_denominator / args.rate_numerator
-                deadline = time.monotonic()
-                while not pump_stop.is_set():
-                    delay = deadline - time.monotonic()
-                    if delay > 0 and pump_stop.wait(delay):
-                        return
-                    with buffer_lock:
-                        current = {
-                            branch: latest_buffers[branch].copy()
-                            for branch in frame_outputs
-                        }
-                    pts = timeline_epoch[0] + frame_number * frame_duration
-                    for branch, appsrc in frame_outputs.items():
-                        buffer = current[branch]
-                        buffer.pts = pts
-                        buffer.dts = Gst.CLOCK_TIME_NONE
-                        buffer.duration = frame_duration
-                        if appsrc.emit("push-buffer", buffer) != Gst.FlowReturn.OK:
-                            pump_stop.set()
-                            return
-                    frame_number += 1
-                    deadline += interval
-                    if deadline < time.monotonic() - interval:
-                        deadline = time.monotonic()
-
-            threading.Thread(target=pump, daemon=True).start()
 
         def observe(_pad, info, gate):
             if info.type & Gst.PadProbeType.BUFFER:
@@ -187,38 +115,12 @@ def main(argv: list[str] | None = None) -> int:
                         threading.Thread(target=open_all, daemon=True).start()
             return Gst.PadProbeReturn.OK
 
-        if frame_inputs:
-            def sample_ready(appsink, branch):
-                sample = appsink.emit("pull-sample")
-                if sample is None or sample.get_buffer() is None:
-                    return Gst.FlowReturn.ERROR
-                with buffer_lock:
-                    first = branch not in latest_buffers
-                    latest_buffers[branch] = sample.get_buffer().copy()
-                if first:
-                    print(
-                        f"NDI frame synchronizer ready: {branch}",
-                        file=sys.stderr,
-                        flush=True,
-                    )
-                with ready_lock:
-                    ready.add(branch)
-                    if len(ready) == len(frame_inputs) and not opened.is_set():
-                        opened.set()
-                        threading.Thread(target=open_all, daemon=True).start()
-                return Gst.FlowReturn.OK
-
-            for branch, appsink in frame_inputs.items():
-                appsink.connect("new-sample", sample_ready, branch)
-        else:
-            for startup_probe in startup_probes:
-                startup_probe.get_static_pad("sink").add_probe(
-                    Gst.PadProbeType.BUFFER, observe, startup_probe
-                )
+        for startup_probe in startup_probes:
+            startup_probe.get_static_pad("sink").add_probe(
+                Gst.PadProbeType.BUFFER, observe, startup_probe
+            )
 
     def stop(*_unused) -> None:
-        if gates:
-            pump_stop.set()
         pipeline.send_event(Gst.Event.new_eos())
 
     signal.signal(signal.SIGTERM, stop)
@@ -242,10 +144,6 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
             flush=True,
         )
-    if gates:
-        pump_stop.set()
-        for appsrc in frame_outputs.values():
-            appsrc.emit("end-of-stream")
     pipeline.set_state(Gst.State.NULL)
     return 1 if failed else 0
 
