@@ -19,12 +19,7 @@ if __package__ in {None, ""}:
 
 from common.health import handler_for_snapshot
 from common.runtime import ExtensionRuntime, RestartBudget
-from inputs.ndi.ndi_input import (
-    BANK_PACING_QUEUE_PREROLL,
-    _flow_name,
-    gst_command,
-    plugin_preflight,
-)
+from inputs.ndi.ndi_input import _flow_name, gst_command, plugin_preflight
 
 HISTORY_OPTION = "urn:x-mxl:option:history_duration/v1.0"
 MINIMUM_HISTORY_NS = 1_000_000_000
@@ -100,7 +95,7 @@ class NDIBank:
             sys.executable, str(pathlib.Path(__file__).with_name("ndi_pipeline.py")),
             "--rate-numerator", str(self.args.rate_numerator),
             "--rate-denominator", str(self.args.rate_denominator),
-            "--startup-lead-frames", str(BANK_PACING_QUEUE_PREROLL + 2),
+            "--startup-lead-frames", "2",
             "--", *tokens,
         ]
 

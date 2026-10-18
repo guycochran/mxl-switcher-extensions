@@ -109,6 +109,7 @@ def gst_command(
         raise ValueError("audio channels must be 1, 2, 4, or 8")
 
     rate = _fraction(rate_numerator, rate_denominator)
+    bank_frame_sync = startup_gate and rate_mode == "normalize"
     source = ["ndisrc"]
     if source_name is not None:
         source.append(f"ndi-name={source_name}")
@@ -142,14 +143,14 @@ def gst_command(
             command.extend([
                 "videoconvert", f"n-threads={convert_threads}", "!",
                 "videoscale", "add-borders=true", "!",
-                f"video/x-raw,format=UYVY,width={width},height={height},"
+                f"video/x-raw,format=v210,width={width},height={height},"
                 "pixel-aspect-ratio=1/1,interlace-mode=progressive,colorimetry=bt709",
                 "!", "appsink", f"name=frame_sync_in_{branch_name}",
                 "emit-signals=true", "sync=false", "async=false",
                 "max-buffers=1", "drop=true",
                 "appsrc", f"name=frame_sync_out_{branch_name}",
                 "is-live=true", "format=time", "do-timestamp=false", "block=false",
-                f"caps=video/x-raw,format=UYVY,width={width},height={height},"
+                f"caps=video/x-raw,format=v210,width={width},height={height},"
                 f"pixel-aspect-ratio=1/1,framerate={rate},"
                 "interlace-mode=progressive,colorimetry=bt709",
                 "!",
@@ -169,38 +170,39 @@ def gst_command(
         ])
     if startup_gate:
         command.extend(["valve", f"name=startup_gate_{branch_name}", "drop=true", "!"])
-    command.extend(["videoconvert", f"n-threads={convert_threads}", "!"])
-    if startup_gate:
-        # Pin every writer-facing field. mxlsink intentionally rejects
-        # mid-stream format changes.
-        command.extend([
-            f"video/x-raw,format=v210,width={width},height={height},"
-            f"pixel-aspect-ratio=1/1,framerate={rate},"
-            "interlace-mode=progressive,colorimetry=bt709",
-            "!",
-        ])
-    else:
-        command.extend(["video/x-raw,format=v210", "!"])
-    if pacing_mode == "retimestamp-clock-sync":
-        command.extend([
-            "identity",
-            *([f"name=timestamp_sync_{branch_name}"] if startup_gate else []),
-            f"datarate={_v210_datarate(width, height, rate_numerator, rate_denominator)}",
-            "single-segment=true",
-            "!",
-        ])
+    if not bank_frame_sync:
+        command.extend(["videoconvert", f"n-threads={convert_threads}", "!"])
         if startup_gate:
+            # Pin every writer-facing field. mxlsink intentionally rejects
+            # mid-stream format changes.
             command.extend([
-                "queue", f"name=pacing_queue_{branch_name}",
-                f"max-size-buffers={BANK_PACING_QUEUE_BUFFERS}",
-                f"min-threshold-buffers={BANK_PACING_QUEUE_PREROLL}",
-                "max-size-time=0", "max-size-bytes=0", "!",
+                f"video/x-raw,format=v210,width={width},height={height},"
+                f"pixel-aspect-ratio=1/1,framerate={rate},"
+                "interlace-mode=progressive,colorimetry=bt709",
+                "!",
             ])
-    if pacing_mode in {"clock-sync", "retimestamp-clock-sync"}:
-        if startup_gate:
-            command.extend(["clocksync", f"name=clock_sync_{branch_name}", "sync-to-first=false", "!"])
         else:
-            command.extend(["clocksync", "sync-to-first=true", "!"])
+            command.extend(["video/x-raw,format=v210", "!"])
+        if pacing_mode == "retimestamp-clock-sync":
+            command.extend([
+                "identity",
+                *([f"name=timestamp_sync_{branch_name}"] if startup_gate else []),
+                f"datarate={_v210_datarate(width, height, rate_numerator, rate_denominator)}",
+                "single-segment=true",
+                "!",
+            ])
+            if startup_gate:
+                command.extend([
+                    "queue", f"name=pacing_queue_{branch_name}",
+                    f"max-size-buffers={BANK_PACING_QUEUE_BUFFERS}",
+                    f"min-threshold-buffers={BANK_PACING_QUEUE_PREROLL}",
+                    "max-size-time=0", "max-size-bytes=0", "!",
+                ])
+        if pacing_mode in {"clock-sync", "retimestamp-clock-sync"}:
+            if startup_gate:
+                command.extend(["clocksync", f"name=clock_sync_{branch_name}", "sync-to-first=false", "!"])
+            else:
+                command.extend(["clocksync", "sync-to-first=true", "!"])
     command.extend(["mxlsink", f"flow-id={video_flow}", f"domain={domain}"])
     if audio_mode != "disabled":
         mask = hex((1 << audio_channels) - 1)
