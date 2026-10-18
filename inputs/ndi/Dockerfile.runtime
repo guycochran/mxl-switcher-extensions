@@ -4,7 +4,7 @@ FROM ${BASE_IMAGE}
 
 WORKDIR /opt/mxl-switcher-extensions
 COPY inputs/ndi/native/ndi_mxl_bank.cpp /tmp/ndi_mxl_bank.cpp
-RUN g++ -std=c++20 -O2 -Wall -Wextra -Wpedantic \
+RUN g++ -std=c++20 -O2 -Wall -Wextra -Wpedantic -pthread \
       $(pkg-config --cflags gstreamer-1.0 gstreamer-app-1.0) \
       /tmp/ndi_mxl_bank.cpp -o /usr/local/bin/ndi-mxl-bank \
       $(pkg-config --libs gstreamer-1.0 gstreamer-app-1.0) -lmxl \

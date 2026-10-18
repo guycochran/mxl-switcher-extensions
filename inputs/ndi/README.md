@@ -183,6 +183,14 @@ IDs, or payloads:
 The telemetry measures; it changes no timing, index, latency, or acceptance
 behavior.
 
+`--copy-workers 1` is an opt-in diagnostic for hosts where that telemetry
+shows payload copy consuming most of the frame period. One persistent helper
+copies the second half of each payload while the coordinator copies the first.
+The helper never calls GStreamer or MXL; grain open, commit, and the shared
+index remain on the coordinator. The default is `0`, preserving the qualified
+serial-copy path until a live A/B gate proves an improvement on the target
+host.
+
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI
 Discovery Server configuration remains an NDI-runtime concern and can be

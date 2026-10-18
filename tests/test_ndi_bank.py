@@ -124,6 +124,31 @@ class BankTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 parse_args([*base, *bad])
 
+    def test_copy_worker_is_opt_in_bounded_and_native_only(self):
+        from inputs.ndi.ndi_bank import parse_args
+        base = ["--domain", self.tmp.name, "--config", "sources.json"]
+        self.assertEqual(parse_args(base).copy_workers, 0)
+        self.assertEqual(parse_args([*base, "--copy-workers", "1"]).copy_workers, 1)
+        for bad in (["--copy-workers", "2"],
+                    ["--copy-workers", "1", "--writer-mode", "gstreamer"]):
+            with self.assertRaises(SystemExit):
+                parse_args([*base, *bad])
+
+    def test_native_copy_worker_is_explicit_and_keeps_mxl_on_coordinator(self):
+        self.args.writer_mode = "native"
+        bank = NDIBank(self.args, self.sources, popen=FakeProcess, clock=lambda: 10.0)
+        self.assertNotIn("--copy-workers", bank._command())
+        self.args.copy_workers = 1
+        command = bank._command()
+        position = command.index("--copy-workers")
+        self.assertEqual(command[position + 1], "1")
+        source = (pathlib.Path(__file__).resolve().parents[1]
+                  / "inputs" / "ndi" / "native" / "ndi_mxl_bank.cpp").read_text()
+        copier = source[source.index("class PayloadCopier"):source.index("class Writer")]
+        self.assertNotIn("mxlFlowWriter", copier)
+        self.assertNotIn("gst_", copier)
+        self.assertIn("copier.copy(payload, map.data, info.grainSize)", source)
+
     def test_native_source_keeps_timing_telemetry_free_of_identities(self):
         source = (pathlib.Path(__file__).resolve().parents[1]
                   / "inputs" / "ndi" / "native" / "ndi_mxl_bank.cpp").read_text()

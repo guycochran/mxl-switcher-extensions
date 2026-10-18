@@ -75,6 +75,7 @@ class NDIBank:
             "timestamp_mode": self.args.timestamp_mode, "pacing_mode": self.args.pacing_mode,
             "rate_mode": self.args.rate_mode, "target_width": self.args.width,
             "timing_report_seconds": getattr(self.args, "timing_report_seconds", 0),
+            "copy_workers": getattr(self.args, "copy_workers", 0),
             "target_height": self.args.height, "target_rate_numerator": self.args.rate_numerator,
             "target_rate_denominator": self.args.rate_denominator,
             "uptime_seconds": 0.0 if self.started_at is None else round(self.clock() - self.started_at, 3),
@@ -100,6 +101,9 @@ class NDIBank:
             report = getattr(self.args, "timing_report_seconds", 0)
             if report:
                 command.extend(["--timing-report-seconds", str(report)])
+            copy_workers = getattr(self.args, "copy_workers", 0)
+            if copy_workers:
+                command.extend(["--copy-workers", str(copy_workers)])
             return command
         tokens: list[str] = []
         for index, source in enumerate(self.sources):
@@ -255,11 +259,17 @@ def parse_args(argv=None):
         "--timing-report-seconds", type=int, default=0,
         help="native writer only: print per-stage scheduler timing every N seconds (0 = off)",
     )
+    parser.add_argument(
+        "--copy-workers", type=int, choices=(0, 1), default=0,
+        help="native writer only: persistent helper threads for payload copy (default 0)",
+    )
     args = parser.parse_args(argv)
     if not 0 <= args.timing_report_seconds <= 3600:
         parser.error("timing report interval must be 0-3600 seconds")
     if args.timing_report_seconds and args.writer_mode != "native":
         parser.error("timing reports require the native writer")
+    if args.copy_workers and args.writer_mode != "native":
+        parser.error("copy workers require the native writer")
     if args.bind not in {"127.0.0.1", "::1", "localhost"}:
         parser.error("health bind must remain loopback-only")
     if args.minimum_history_ns < MINIMUM_HISTORY_NS:

@@ -9,15 +9,18 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -233,6 +236,76 @@ class TickTiming {
   long nivcsw_at_start_{0}, nvcsw_at_start_{0}, minflt_at_start_{0}, majflt_at_start_{0};
 };
 
+// One persistent helper may copy the second half of a payload while the
+// coordinator copies the first. It never calls GStreamer or MXL and touches a
+// non-overlapping byte range. Keeping MXL open/commit on the coordinator
+// preserves the single-writer and shared-index invariants.
+class PayloadCopier {
+ public:
+  explicit PayloadCopier(int workers) : workers_(workers) {
+    if (workers_ == 1) worker_ = std::thread([this] { run(); });
+  }
+  ~PayloadCopier() {
+    if (!worker_.joinable()) return;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      stopping_ = true;
+    }
+    work_ready_.notify_one();
+    worker_.join();
+  }
+  PayloadCopier(const PayloadCopier&) = delete;
+  PayloadCopier& operator=(const PayloadCopier&) = delete;
+
+  void copy(std::uint8_t* destination, const std::uint8_t* source,
+            std::size_t size) {
+    if (workers_ == 0 || size < 2) {
+      std::memcpy(destination, source, size);
+      return;
+    }
+    const auto first_size = size / 2;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      destination_ = destination + first_size;
+      source_ = source + first_size;
+      size_ = size - first_size;
+      done_ = false;
+      pending_ = true;
+    }
+    work_ready_.notify_one();
+    std::memcpy(destination, source, first_size);
+    std::unique_lock<std::mutex> lock(mutex_);
+    work_done_.wait(lock, [this] { return done_; });
+  }
+
+ private:
+  void run() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    while (true) {
+      work_ready_.wait(lock, [this] { return stopping_ || pending_; });
+      if (stopping_) return;
+      auto* destination = destination_;
+      const auto* source = source_;
+      const auto size = size_;
+      pending_ = false;
+      lock.unlock();
+      std::memcpy(destination, source, size);
+      lock.lock();
+      done_ = true;
+      work_done_.notify_one();
+    }
+  }
+
+  int workers_{0};
+  std::thread worker_{};
+  std::mutex mutex_{};
+  std::condition_variable work_ready_{}, work_done_{};
+  bool stopping_{false}, pending_{false}, done_{false};
+  std::uint8_t* destination_{nullptr};
+  const std::uint8_t* source_{nullptr};
+  std::size_t size_{0};
+};
+
 class Writer {
  public:
   Writer(mxlInstance instance, const std::string& definition)
@@ -254,7 +327,8 @@ class Writer {
   Writer(const Writer&) = delete;
   Writer& operator=(const Writer&) = delete;
 
-  void write(std::uint64_t index, GstBuffer* buffer, TickTiming& timing) {
+  void write(std::uint64_t index, GstBuffer* buffer, TickTiming& timing,
+             PayloadCopier& copier) {
     auto mark = Clock::now();
     const auto lap = [&](std::int64_t& maximum) {
       const auto now = Clock::now();
@@ -279,7 +353,7 @@ class Writer {
       gst_buffer_unmap(buffer, &map);
       throw std::runtime_error("decoded frame is smaller than the MXL grain");
     }
-    std::memcpy(payload, map.data, info.grainSize);
+    copier.copy(payload, map.data, info.grainSize);
     gst_buffer_unmap(buffer, &map);
     lap(timing.max_copy_ns);
     info.flags = 0;
@@ -410,6 +484,9 @@ int main(int argc, char** argv) {
     const auto rate_den = std::stoi(required(args, "rate-denominator"));
     const auto convert_threads = std::stoi(required(args, "convert-threads"));
     const auto& timestamp_mode = required(args, "timestamp-mode");
+    const auto copy_workers_arg = args.find("copy-workers");
+    const auto copy_workers =
+        copy_workers_arg == args.end() ? 0 : std::stoi(copy_workers_arg->second);
     // Optional and off by default, so existing command lines are unchanged.
     const auto report = args.find("timing-report-seconds");
     const auto report_seconds = report == args.end() ? 0 : std::stoll(report->second);
@@ -417,7 +494,8 @@ int main(int argc, char** argv) {
       throw std::invalid_argument("timing report interval must be 0-3600 seconds");
     }
     if (count < 2 || count > 8 || width <= 0 || height <= 0 || rate_num <= 0 ||
-        rate_den <= 0 || convert_threads < 1 || convert_threads > 32) {
+        rate_den <= 0 || convert_threads < 1 || convert_threads > 32 ||
+        copy_workers < 0 || copy_workers > 1) {
       throw std::invalid_argument("invalid bank geometry, rate, or source count");
     }
 
@@ -453,6 +531,7 @@ int main(int argc, char** argv) {
     std::uint64_t ticks = 0;
     std::uint64_t repeated = 0;
     TickTiming timing(report_seconds);
+    PayloadCopier copier(copy_workers);
     while (running) {
       const auto until = mxlGetNsUntilIndex(index, &rate);
       const auto deadline = Clock::now() + std::chrono::nanoseconds(until);
@@ -473,7 +552,7 @@ int main(int argc, char** argv) {
       // One coordinator owns every writer. Each tick is committed to the same
       // explicit MXL index for all flows before the bank advances.
       for (std::size_t i = 0; i < count; ++i) {
-        writers[i]->write(index, inputs[i]->latest(), timing);
+        writers[i]->write(index, inputs[i]->latest(), timing, copier);
       }
       if (timing.enabled()) {
         timing.tick_done(elapsed_ns(woke, Clock::now()));
