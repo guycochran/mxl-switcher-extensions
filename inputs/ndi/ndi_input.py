@@ -35,7 +35,7 @@ FLOW_ACTIVE_SECONDS = 60.0
 ALLOWED_CHANNELS = (1, 2, 4, 8)
 TIMESTAMP_MODES = ("receive-time", "timestamp", "timecode", "clocked")
 REQUIRED_PLUGINS = (
-    "ndisrc", "ndisrcdemux", "queue", "valve", "watchdog", "appsink", "appsrc", "videorate", "videoscale",
+    "ndisrc", "ndisrcdemux", "queue", "valve", "watchdog", "intervideosink", "intervideosrc", "videorate", "videoscale",
     "videoconvert", "identity", "clocksync", "audioconvert", "audioresample", "audiorate", "mxlsink",
 )
 
@@ -136,22 +136,20 @@ def gst_command(
         ])
     if rate_mode == "normalize":
         if startup_gate:
-            # Convert once into a fixed, inexpensive holding format.  The
-            # paired appsink/appsrc elements are driven by ndi_pipeline.py on
-            # one shared cadence, so a short NDI arrival stall repeats an
-            # actual last-good picture rather than emitting a GAP buffer.
+            # Convert once into a fixed holding format.  GStreamer's native
+            # inter-video bridge retains the latest real picture and emits it
+            # on the target live cadence; the upstream watchdog still fails
+            # the bank closed after a prolonged source loss.
             command.extend([
                 "videoconvert", f"n-threads={convert_threads}", "!",
                 "videoscale", "add-borders=true", "!",
-                f"video/x-raw,format=v210,width={width},height={height},"
+                f"video/x-raw,format=UYVY,width={width},height={height},"
                 "pixel-aspect-ratio=1/1,interlace-mode=progressive,colorimetry=bt709",
-                "!", "appsink", f"name=frame_sync_in_{branch_name}",
-                "emit-signals=true", "sync=false", "async=false",
-                "max-buffers=1", "drop=true",
-                "appsrc", f"name=frame_sync_out_{branch_name}",
-                "is-live=true", "format=time", "do-timestamp=false",
-                "block=true", "max-buffers=1",
-                f"caps=video/x-raw,format=v210,width={width},height={height},"
+                "!", "intervideosink", f"name=frame_bridge_in_{branch_name}",
+                f"channel={branch_name}", "sync=false", "async=false",
+                "intervideosrc", f"name=frame_bridge_out_{branch_name}",
+                f"channel={branch_name}", "do-timestamp=true", "timeout=30000000000",
+                "!", f"video/x-raw,format=UYVY,width={width},height={height},"
                 f"pixel-aspect-ratio=1/1,framerate={rate},"
                 "interlace-mode=progressive,colorimetry=bt709",
                 "!",
@@ -172,19 +170,18 @@ def gst_command(
     if startup_gate:
         command.extend(["valve", f"name=startup_gate_{branch_name}", "drop=true", "!"])
     if bank_frame_sync:
-        # Decouple each live appsrc task from mxlsink.  A live source directly
-        # attached to the sink cannot satisfy GStreamer's processing-latency
-        # query and fails its streaming task.
+        command.extend([
+            "videoconvert", f"n-threads={convert_threads}", "!",
+            f"video/x-raw,format=v210,width={width},height={height},"
+            f"pixel-aspect-ratio=1/1,framerate={rate},"
+            "interlace-mode=progressive,colorimetry=bt709", "!",
+        ])
+        # Decouple each live inter-video task from mxlsink and satisfy the
+        # sink's processing-latency contract.
         command.extend([
             "queue", f"name=writer_queue_{branch_name}",
             "max-size-buffers=4", "max-size-time=0", "max-size-bytes=0", "!",
         ])
-        if pacing_mode == "retimestamp-clock-sync":
-            command.extend([
-                "identity", f"name=timestamp_sync_{branch_name}",
-                f"datarate={_v210_datarate(width, height, rate_numerator, rate_denominator)}",
-                "single-segment=true", "!",
-            ])
     if not bank_frame_sync:
         command.extend(["videoconvert", f"n-threads={convert_threads}", "!"])
         if startup_gate:
