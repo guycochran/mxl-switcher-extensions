@@ -58,6 +58,8 @@ class BankTests(unittest.TestCase):
         self.assertIn("name=frame_sync_in_demux1", command)
         self.assertIn("name=frame_sync_out_demux0", command)
         self.assertIn("name=frame_sync_out_demux1", command)
+        self.assertIn("name=writer_queue_demux0", command)
+        self.assertIn("name=writer_queue_demux1", command)
         self.assertEqual(command.count("appsink"), 2)
         self.assertEqual(command.count("appsrc"), 2)
         self.assertEqual(command.count("async=false"), 2)

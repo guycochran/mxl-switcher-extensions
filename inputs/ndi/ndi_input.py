@@ -170,6 +170,14 @@ def gst_command(
         ])
     if startup_gate:
         command.extend(["valve", f"name=startup_gate_{branch_name}", "drop=true", "!"])
+    if bank_frame_sync:
+        # Decouple each live appsrc task from mxlsink.  A live source directly
+        # attached to the sink cannot satisfy GStreamer's processing-latency
+        # query and fails its streaming task.
+        command.extend([
+            "queue", f"name=writer_queue_{branch_name}",
+            "max-size-buffers=4", "max-size-time=0", "max-size-bytes=0", "!",
+        ])
     if not bank_frame_sync:
         command.extend(["videoconvert", f"n-threads={convert_threads}", "!"])
         if startup_gate:
