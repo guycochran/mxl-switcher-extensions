@@ -37,6 +37,15 @@ errors, but failed the strict no-skip criterion with 99 catch-up events / 345
 grains. Treat CPU and memory budgets as met only provisionally until that
 catch-up behavior is closed on the reference host.
 
+Three-minute timing diagnostics removed heavy resource polling and confirmed
+that the native bank occasionally misses its real-time deadline, advances only
+19-20 frames in a one-second sample, then commits the continuous backlog. A
+two-second history ring reduced but did not eliminate Core fallback/catch-up.
+Combining deeper history with a larger writer lead also failed the zero-skip
+criterion, so that lead knob was rejected instead of being shipped. Further
+strict endurance work belongs on a faster CPU or after a measured hot-path
+optimization, not another latency-tuning pass on this host.
+
 ## Delivery stages
 
 ### 1. Pipeline and timestamp A/B

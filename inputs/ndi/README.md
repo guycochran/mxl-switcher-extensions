@@ -154,6 +154,15 @@ unavailable-alarm events and eight catch-up events / 42 grains; active alarms
 cleared and no selected index regressed. Audio and a strict no-skip endurance
 result still control promotion.
 
+Follow-up three-minute diagnostics confirmed that the remaining skips are
+scheduler-deadline misses on the older qualification CPU. Increasing MXL
+history from one to two seconds reduced holds and catch-up events, and combining
+that history with a larger writer lead reduced them further, but neither
+profile reached zero skips. The unqualified lead control was therefore not
+shipped. Use the one-second profile as the documented baseline and move strict
+endurance qualification to a faster CPU rather than masking overload with
+undocumented latency.
+
 For direct connection, use `--source-address host:port` instead of
 `--source-name`. The two selectors are intentionally mutually exclusive. NDI
 Discovery Server configuration remains an NDI-runtime concern and can be
