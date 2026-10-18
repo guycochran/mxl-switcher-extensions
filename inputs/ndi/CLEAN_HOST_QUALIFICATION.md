@@ -71,7 +71,20 @@ selectors, addresses, flow IDs, config contents, or host paths.
 
 ## Apply the staged gate
 
-Repeat the same command with `--apply`. The harness then:
+Repeat the same command with `--apply`, **as root**:
+
+```sh
+sudo python3 inputs/ndi/qualify_clean_host.py ...same arguments... --apply
+```
+
+The bank and Core containers run as root and create root-owned `*.mxl-flow`
+directories inside the bind-mounted domain. Only root can then remove that exact
+owned domain, so `--apply` refuses to start unless it runs as root (checked
+before any container or domain is created). The dry preflight may run as an
+unprivileged Docker user. Under `sudo` the evidence directory is root-owned;
+read it with `sudo`.
+
+The harness then:
 
 1. creates one private MXL domain with one second of history;
 2. launches exactly one native NDI bank and one isolated Core, each with
