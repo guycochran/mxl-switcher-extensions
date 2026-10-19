@@ -143,6 +143,25 @@ does not stop ZoomISO, EasyMXL, Docker, the meeting, or unrelated services. If
 the host is a metered cloud VM, deallocate it separately and verify the cloud
 provider reports **deallocated**, not merely guest-stopped.
 
+For the 30-minute promotion run, keep the SSH tunnel and YouTube output active
+and use the combined gate instead of running the Core and destination checks
+one after another:
+
+```sh
+python3 scripts/qualify_online_program.py \
+  --config demo-config.json \
+  --url http://127.0.0.1:18123 \
+  --seconds 1800
+```
+
+It continuously samples all eight YouTube source branches, composition, audio,
+encode, mux, destination bytes, reconnects, process resources, and whole-host
+headroom while bracketing the same interval with the authoritative Core and
+confidence checks. The private mode-0600 JSON report is written inside the
+configured state directory. A machine pass still requires the operator to
+confirm audible Program mix and acceptable audience A/V sync, and to capture
+two audience frames at least ten seconds apart with different timecodes.
+
 Read [`deploy/online-demo/README.md`](deploy/online-demo/README.md) for the
 component boundaries, capacity guidance, failure behavior, and exact remaining
 acceptance gates. That document also records the public-safe fresh-host smoke

@@ -122,6 +122,12 @@ audio falls below 90% of its expected AAC frame cadence, the send queue reaches
 worst source lateness and send-queue level so a failed run can be localized.
 It never reads or prints the stream key.
 
+For the promotion-duration run, use
+`scripts/qualify_online_program.py --seconds 1800` from the repository root.
+That wrapper applies this sustained destination gate while bracketing the same
+window with Core/confidence snapshots and sampling whole-host CPU and available
+memory. It does not replace the audience listening and paired-timecode checks.
+
 ### Audience proof capture
 
 Capture evidence only after the 30-second gate passes and YouTube Studio says

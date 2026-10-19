@@ -50,7 +50,9 @@ profile. They remain independent promotion tracks.
 
 ### 3. Real destination gate
 
-- Run the output's sustained machine-readable gate for at least 30 minutes.
+- Run `scripts/qualify_online_program.py` for at least 30 minutes so the Core,
+  confidence feeds, destination path, and whole-host headroom share one evidence
+  window and one verdict.
 - Require every selected source, composition, encoder, audio path, mux, and
   destination byte counter to advance for every sample.
 - Require zero reconnects and bounded RSS.
