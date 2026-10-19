@@ -9,6 +9,8 @@ stack—start with the [end-to-end quickstart](QUICKSTART.md).
 Read the [technical-preview boundary](docs/TECHNICAL_PREVIEW.md) before using
 that demonstration as a product or production claim. It separates the proven
 single-host path from the extensions that remain experimental.
+The [latest integrated status](docs/STATUS_2026-10-18.md) records the combined
+eight-source load failure and the resulting Streaming Egress Module direction.
 For a bounded workflow evaluation, see the
 [design-partner pilot](docs/DESIGN_PARTNER_PILOT.md).
 Operators beginning with a new host should first read the
@@ -126,21 +128,22 @@ four- or eight-source MXL composition, CPU and optional NVENC profiles, a
 loopback-only operator window, in-memory stream-key handling, Program audio,
 and bounded reconnect behavior. Its readiness signal now fails closed unless
 every selected source, encoded video, audio, mux bitrate, and the eight-up
-diagnostic clock are all advancing. A CPU-only cloud run delivered the complete
+diagnostic clock are all advancing. A controlled CPU-only cloud run delivered the complete
 eight-source ZoomISO MXL composition, Program audio, and smoothly advancing
 diagnostic timecode to the YouTube audience player at 4K. The documented live
 sample used approximately 14.05–15.84 of the VM's 32 logical CPUs across
-ZoomISO and the output adapter. This proves the end-to-end demonstration; the
-sustained audience acceptance gate remains open pending paired timecode
-captures and a continuously green telemetry window. The package is
-deliberately still labeled `prototype`.
+ZoomISO and the output adapter. A later combined run with both warm layout
+banks, active confidence monitoring, and browser multiview fell below video
+cadence and produced choppy audience audio. The first run proves the transport
+demonstration; it does not prove the combined single-host profile. The package
+is deliberately still labeled `prototype`.
 
 The follow-up controller build can derive one paired audio flow per selected
 ZoomISO video source and mix all eight into the stereo Program bus. Its final
 pre-shutdown state reported eight active video sources and eight active audio
-sources. This expands the demonstrated single-source Program audio path, but
-the new eight-source mix still needs a separate audience-listening gate before
-it is described as accepted broadcast audio.
+sources, but the later audience run was audibly choppy despite nominal AAC
+cadence. The inline mix is therefore failed for promotion and should be
+replaced by the stable Program Audio mixer before another destination gate.
 
 The shared operational layer is implemented today: manifests declare common
 state/liveness/readiness paths, adapters can use the thread-safe lifecycle and

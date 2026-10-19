@@ -5,6 +5,12 @@ demonstrated and can be reproduced without private project history. It is an
 honest integration preview, not a claim that every extension is ready for
 unattended broadcast operation.
 
+The latest combined-load result and the resulting separate-egress direction
+are recorded in the [integrated eight-source status](STATUS_2026-10-18.md).
+That operated run did not pass the 4K video or audience-audio gates, so it
+supersedes any interpretation of the earlier transport demonstration as a
+production acceptance result.
+
 ## Supported demonstration path
 
 The primary path is one modern x86-64 Linux host running:
@@ -39,7 +45,7 @@ but is not a supported eight-source 1080p30 baseline.
 | ZoomISO MXL contribution | Eight paired source video/audio flows discovered and operated through the guarded bundle |
 | Core routing | Stable Program and Preview identities, operator Preview/Take, and zero hard-counter movement in both the published caveat-zero rehearsal and a later eight-distinct-source live acceptance window |
 | Operator confidence | Advancing Program, Preview, one eight-source multiview wall, and warm 2-up through 8-up MXL layout banks with an ATEM-style browser Skin |
-| YouTube output | CPU-only 3840x2160p30 eight-source composition, Program audio, diagnostic timecode, and RTMPS delivery demonstrated on a modern 32-vCPU cloud host |
+| YouTube output | CPU-only 3840x2160p30 eight-source composition, Program audio, diagnostic timecode, and RTMPS delivery demonstrated on a modern 32-vCPU cloud host; a later combined production-load run failed cadence and audience-audio acceptance |
 | NDI input | Experimental two-source, video-only split-copy path passed strict 60-second and 180-second clean-host gates on a modern 16-vCPU receiver using two full-bandwidth ZoomISO NDI outputs over a private network |
 | Portability | Azure is the demonstrated CPU reference; comparable Google Cloud and AWS machines are candidates until independently qualified |
 
@@ -89,6 +95,11 @@ preview claim:
 - SRT, DeckLink, recording/replay, and TAMS production profiles;
 - multi-host MXL fabrics; and
 - eight simultaneous 1080p30 sources on the older lab host.
+
+The planned MXL Streaming Egress Module is an architecture direction, not a
+shipped multi-host feature. Because MXL shared memory is host-local, a separate
+egress VM requires an explicit, independently qualified final-Program network
+handoff.
 
 Do not describe this preview as a production appliance. The broader
 [broadcast-readiness plan](BROADCAST_READINESS.md) remains the promotion

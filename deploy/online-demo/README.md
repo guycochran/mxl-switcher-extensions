@@ -138,6 +138,15 @@ separate audience listening and long-run A/V synchronization gate. Treat this
 bundle as a reproducible demonstration profile, not an unattended production
 appliance.
 
+A later operated run combined eight mapped sources, two warm layout banks,
+Program/Preview/multiview confidence, browser viewing, and live 4K delivery on
+the same 32-vCPU host. That run fell to roughly 21--23 encoded fps with about
+9 percent host idle, multiple seconds of source lateness, and audibly choppy
+Program audio despite nominal AAC-buffer telemetry. See the
+[integrated status](../../docs/STATUS_2026-10-18.md). It is the current capacity
+and audience-quality boundary and prevents promotion of the single-host 4K
+profile.
+
 ## Fresh-host smoke result (2026-10-16)
 
 The guarded bundle was exercised from bootstrap through cleanup on a clean,

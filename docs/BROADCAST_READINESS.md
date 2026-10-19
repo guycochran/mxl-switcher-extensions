@@ -17,6 +17,13 @@ recording, and hardware I/O. EasyMXL owns discovery, configuration, lifecycle,
 and evidence collection. A failure in one extension must not interrupt Core or
 another destination.
 
+For 4K delivery, the preferred boundary is a separately restartable and sized
+**MXL Streaming Egress Module**. It consumes one final Program handoff rather
+than eight contribution sources, so destination encoding cannot starve Core,
+Program Audio, or operator confidence. This is a promotion direction rather
+than a current multi-host claim: MXL shared memory is host-local, so a separate
+VM also requires a measured network bridge for the final Program essence.
+
 The first supported profile is intentionally narrow:
 
 - four or six live MXL video sources;
@@ -106,7 +113,8 @@ silently turn green.
 | Profile | Intended use | Acceptance boundary |
 |---|---|---|
 | Local CPU | Daily development and four/six-source demonstrations | Reduced source count with at least 20% measured headroom |
-| Fast cloud CPU | Eight-source and 4K acceptance | Full cadence, destination, recovery, and duration gates |
+| Fast cloud CPU | Eight-source production-node acceptance | Full routing, layout, confidence, audio, recovery, and duration gates without destination encoding starving the node |
+| Streaming egress | Independently sized 4K destination module | Qualified final-Program network handoff, full encoded cadence, clean audio, destination recovery, and at least 20% headroom |
 | Optional GPU | Dense layouts or multiple encoded destinations | Same gates; GPU is an optimization, not a Core dependency |
 
 Claims about MXL efficiency must name the tested media format, topology, host,

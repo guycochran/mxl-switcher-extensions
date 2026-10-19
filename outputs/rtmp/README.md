@@ -2,6 +2,12 @@
 
 Direct Program Master encode for services such as YouTube.
 
+> **Current boundary:** the earlier CPU-only transport demonstration succeeded,
+> but the later combined eight-source production-load run did not pass full
+> video cadence or audience-audio quality. Read the
+> [integrated status](../../docs/STATUS_2026-10-18.md) before using the earlier
+> evidence below for sizing or readiness claims.
+
 **Maturity: prototype.** The executable path reads MXL video and audio directly,
 uses hardware H.264 encoding, and sets the RTMPS destination through the
 GStreamer API on the modern `rtmp2sink` implementation after reading a

@@ -32,8 +32,12 @@ separately.
   sustained software encoder gate.
 - Do not substitute ARM/Graviton, C4A, or T2A yet. The current images and
   licensed dependencies have only been qualified on x86-64.
-- Keep ZoomISO, the MXL shared-memory domain, Core, confidence services, and
-  the YouTube adapter on the same VM. MXL shared memory does not span hosts.
+- Keep ZoomISO, the MXL shared-memory domain, Core, and confidence services on
+  the production VM. MXL shared memory does not span hosts. The current demo
+  also co-locates YouTube, but the combined 4K profile did not retain adequate
+  headroom. Moving the planned Streaming Egress Module to another VM requires
+  one explicit, qualified final-Program network handoff; a remote process
+  cannot mount or subscribe to the production VM's MXL domain directly.
 - Do not add a GPU to the baseline. Test GPU acceleration later as a separate
   profile rather than changing the proven CPU-only architecture.
 - Confirm regional availability and quota before scheduling the test. Prices
