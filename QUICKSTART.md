@@ -144,8 +144,9 @@ the host is a metered cloud VM, deallocate it separately and verify the cloud
 provider reports **deallocated**, not merely guest-stopped.
 
 For the 30-minute promotion run, keep the SSH tunnel and YouTube output active
-and use the combined gate instead of running the Core and destination checks
-one after another:
+and leave the Skin's multiview visibly playing in the operator browser. Then
+use the combined gate instead of running the Core and destination checks one
+after another:
 
 ```sh
 python3 scripts/qualify_online_program.py \
@@ -154,7 +155,9 @@ python3 scripts/qualify_online_program.py \
   --seconds 1800
 ```
 
-It continuously samples all eight YouTube source branches, composition, audio,
+It continuously requires the same MediaMTX WebRTC multiview reader to remain
+connected with advancing bytes and RTP packets and zero discarded frames. It
+also samples all eight YouTube source branches, composition, audio,
 encode, mux, destination bytes, reconnects, process resources, and whole-host
 headroom while bracketing the same interval with the authoritative Core and
 confidence checks. The private mode-0600 JSON report is written inside the

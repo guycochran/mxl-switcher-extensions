@@ -53,6 +53,9 @@ profile. They remain independent promotion tracks.
 - Run `scripts/qualify_online_program.py` for at least 30 minutes so the Core,
   confidence feeds, destination path, and whole-host headroom share one evidence
   window and one verdict.
+- Keep an operator multiview open throughout the gate; require one stable
+  MediaMTX WebRTC reader with advancing bytes/RTP packets and zero discarded
+  frames so measured headroom includes real confidence delivery.
 - Require every selected source, composition, encoder, audio path, mux, and
   destination byte counter to advance for every sample.
 - Require zero reconnects and bounded RSS.

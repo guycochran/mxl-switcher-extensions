@@ -34,6 +34,29 @@ class OnlineProgramQualificationTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertEqual(result["idle_percent_min"], 10)
 
+    def test_multiview_viewer_must_remain_connected_and_advance(self):
+        def viewer(byte_count, packet_count):
+            return {"items": [{
+                "id": "viewer-1",
+                "path": "mxl-multiview",
+                "state": "read",
+                "peerConnectionEstablished": True,
+                "outboundBytes": byte_count,
+                "outboundRTPPackets": packet_count,
+                "outboundFramesDiscarded": 0,
+            }]}
+
+        result = gate.summarize_multiview_viewer([viewer(1000, 10), viewer(2000, 20)])
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["stable_viewers"], 1)
+        self.assertEqual(result["outbound_bytes_delta_min"], 1000)
+
+        stalled = gate.summarize_multiview_viewer([viewer(1000, 10), viewer(1000, 10)])
+        self.assertFalse(stalled["passed"])
+
+        absent = gate.summarize_multiview_viewer([viewer(1000, 10), {"items": []}])
+        self.assertFalse(absent["passed"])
+
     def test_private_report_is_mode_0600(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "report.json"
@@ -75,15 +98,28 @@ class OnlineProgramQualificationTests(unittest.TestCase):
             {"cpu": (100, 40), "mem_available_mib": 4096},
             {"cpu": (200, 70), "mem_available_mib": 4000},
         ])
+        webrtc_samples = iter([
+            {"items": [{
+                "id": "viewer-1", "path": "mxl-multiview", "state": "read",
+                "peerConnectionEstablished": True, "outboundBytes": 1000,
+                "outboundRTPPackets": 10, "outboundFramesDiscarded": 0,
+            }]},
+            {"items": [{
+                "id": "viewer-1", "path": "mxl-multiview", "state": "read",
+                "peerConnectionEstablished": True, "outboundBytes": 2000,
+                "outboundRTPPackets": 20, "outboundFramesDiscarded": 0,
+            }]},
+        ])
         with mock.patch.object(gate.demo, "acceptance_snapshot", side_effect=[{"a": 1}, {"a": 2}]), \
                 mock.patch.object(gate.demo, "evaluate_acceptance", return_value={"passed": True}):
             result = gate.run_gate(
-                {"source_count": 8, "deployment_id": "test-demo"},
+                {"source_count": 8, "deployment_id": "test-demo", "mediamtx_api_port": 9997},
                 controller_url="http://127.0.0.1:18123",
                 seconds=30,
                 interval=30,
                 minimum_idle_percent=20,
                 fetch=lambda _url: youtube_sample,
+                fetch_webrtc=lambda _url: next(webrtc_samples),
                 sample_host=lambda: next(host_samples),
                 clock=clock,
                 sleeper=sleeper,
@@ -91,6 +127,7 @@ class OnlineProgramQualificationTests(unittest.TestCase):
         self.assertTrue(result["passed"])
         self.assertTrue(result["core"]["passed"])
         self.assertTrue(result["youtube"]["passed"])
+        self.assertTrue(result["multiview_webrtc_viewer"]["passed"])
         self.assertTrue(result["host_resources"]["passed"])
         self.assertEqual(len(result["human_observations_required"]), 4)
 

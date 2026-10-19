@@ -126,7 +126,9 @@ For the promotion-duration run, use
 `scripts/qualify_online_program.py --seconds 1800` from the repository root.
 That wrapper applies this sustained destination gate while bracketing the same
 window with Core/confidence snapshots and sampling whole-host CPU and available
-memory. It does not replace the audience listening and paired-timecode checks.
+memory. It also requires a stable, advancing WebRTC reader on the multiview
+path, so leave the Skin multiview open for the entire run. It does not replace
+the audience listening and paired-timecode checks.
 
 ### Audience proof capture
 
