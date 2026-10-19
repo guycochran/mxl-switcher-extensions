@@ -85,9 +85,9 @@ def pipeline_description(args: argparse.Namespace) -> str:
         parts.extend([
             f"mxlsrc domain={args.domain} video-flow-id={flow_id} automatic-eos=false",
             "! queue max-size-buffers=3 max-size-time=0 max-size-bytes=0 leaky=downstream",
-            "! videoscale method=1 add-borders=true",
-            f"! video/x-raw,width={tile.width},height={tile.height},framerate={args.rate}",
             "! videoconvert n-threads=2",
+            f"! video/x-raw,format=BGRA,framerate={args.rate}",
+            "! videoscale method=1 add-borders=true",
             f"! video/x-raw,format=BGRA,width={tile.width},height={tile.height},framerate={args.rate}",
             f"! identity name=input_{index} silent=true",
             "! queue max-size-buffers=2 max-size-time=0 max-size-bytes=0 leaky=downstream",
