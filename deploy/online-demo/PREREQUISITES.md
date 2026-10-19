@@ -59,7 +59,9 @@ application's license and authorization requirements.
 
 Build the Apache-2.0 MXL SDK and
 `gst-mxl-rs` plugin from the public Media eXchange Layer project, or obtain an
-operator-controlled image containing them. Use an MXL revision compatible with
+operator-controlled image containing them. The [from-source base-image recipe](base-image/README.md) builds a
+conforming image from public components only; it pins MXL `v1.1.0`, the release
+matching ZoomISO Cloud 0.1.0.77. Use an MXL revision compatible with
 the installed ZoomISO release; confirm that revision with the ZoomISO vendor or
 its release notes.
 

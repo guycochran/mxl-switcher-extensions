@@ -32,6 +32,9 @@ The image must contain the following runtime and build contract:
 fails with the missing contract items before any build or service launch. This
 is the supported compatibility test; a matching image name alone is not proof.
 
+To build a conforming image from public sources only, use the
+[from-source base-image recipe](base-image/README.md).
+
 For a clean-host rehearsal, load or build this operator-controlled image before running
 `init`, and record that it was a preloaded prerequisite. Do not publish the
 image or infer redistribution permission from a successful local run.
