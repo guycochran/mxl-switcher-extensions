@@ -111,11 +111,14 @@ timing and flow-replacement recovery gates pass.
 The [NDI Input Module](inputs/ndi) is now a qualified prototype. Its recommended
 two-input bank uses one native shared-index writer, and its experimental
 split-copy video path passed strict 60-second and 180-second clean-host gates on
-a modern CPU receiver at approximately 30 fps with 0–1 frame of skew, zero
-holds/skips/catch-up/restarts, and zero Core hard-counter movement. That result
-does not qualify NDI audio, seamless source replacement, larger banks, or every
-codec/source combination, so the package correctly remains below candidate
-maturity.
+a modern CPU receiver using two full-bandwidth ZoomISO NDI outputs over a
+private network. It held approximately 30 fps with 0–1 frame of skew, zero
+holds/skips/catch-up/restarts, and zero Core hard-counter movement. HX2/HX3 PTZ
+senders on the shared older lab host did not meet the strict no-skip gate; that
+combined host/decode result does not isolate the codec and remains unqualified.
+The passing result also does not qualify NDI audio, seamless source
+replacement, larger banks, or every codec/source combination, so the package
+correctly remains below candidate maturity.
 
 The [YouTube RTMPS output](outputs/rtmp) is a working 4K prototype with direct
 four- or eight-source MXL composition, CPU and optional NVENC profiles, a

@@ -6,7 +6,7 @@ following machines for the first comparable Google Cloud and AWS tests.
 
 | Provider | First test | vCPU | RAM | Status |
 | --- | --- | ---: | ---: | --- |
-| Azure | `Standard_D32s_v5` | 32 | 128 GiB | Accepted reference |
+| Azure | `Standard_D32s_v5` | 32 | 128 GiB | Demonstrated reference |
 | Google Cloud | `n2-standard-32` | 32 | 128 GB | Exact-size test candidate |
 | AWS | `m8i.8xlarge` | 32 | 128 GiB | Preferred current-generation test candidate |
 | AWS | `m7i.8xlarge` | 32 | 128 GiB | Fallback when M8i is unavailable |

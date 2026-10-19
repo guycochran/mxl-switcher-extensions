@@ -64,13 +64,13 @@ Record each item as pass, fail, or question:
 | Initialization | One correct MXL domain and local base image selected without guessing |
 | Preflight | All required checks pass and every warning has a clear next action |
 | Launch | Seven owned services start and stay at zero restarts |
-| Confidence | Program, Preview, and multiview visibly advance |
+| Confidence | Program, Preview, and multiview visibly advance; `check` reports `frames_progress=true` and `all_sources_live=true` for every confidence output |
 | Control | Preview and Take work; Program can be restored deliberately |
-| Audio | Program mix is audible; any unqualified eight-source A/V limitation is reported |
+| Audio | Program mix is audible; while streaming, the controller reports `audio_ready=true` and 42.2–47.8 AAC buffers/s; the unqualified eight-source A/V limitation is reported |
 | Acceptance | The 30-second check passes with zero hard-counter movement |
-| Secrets | No meeting credential or stream key enters Git, logs, or process arguments |
-| Cleanup | Only the seven labelled containers are removed; ZoomISO and unrelated services remain |
-| Cloud stop | A metered VM reaches the provider's non-billing stopped/deallocated state |
+| Secrets | No meeting credential or stream key enters Git, logs, or process arguments; inspect the YouTube container arguments and public evidence for key-like values without recording the key itself |
+| Cleanup | `down` lists exactly seven labelled containers; before/after container inventories show unrelated names and restart counts unchanged |
+| Cloud stop | A metered VM reaches the provider's stopped/deallocated state; compute billing is stopped and any continuing disk or reserved-address charges are recorded |
 
 Also record every question verbatim and the document section where the operator
 expected to find the answer. Do not put private addresses, identities, flow

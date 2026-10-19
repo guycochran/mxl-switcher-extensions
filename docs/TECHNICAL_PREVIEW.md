@@ -40,25 +40,29 @@ but is not a supported eight-source 1080p30 baseline.
 | Core routing | Stable Program and Preview identities, operator Preview/Take, zero hard-counter movement in the published caveat-zero rehearsal |
 | Operator confidence | Advancing Program, Preview, and one eight-source multiview wall with an ATEM-style browser Skin |
 | YouTube output | CPU-only 3840x2160p30 eight-source composition, Program audio, diagnostic timecode, and RTMPS delivery demonstrated on a modern 32-vCPU cloud host |
-| NDI input | Experimental two-source, video-only split-copy path passed strict 60-second and 180-second clean-host gates on a modern 16-vCPU receiver |
-| Portability | Azure is the accepted CPU reference; comparable Google Cloud and AWS machines are candidates until independently qualified |
+| NDI input | Experimental two-source, video-only split-copy path passed strict 60-second and 180-second clean-host gates on a modern 16-vCPU receiver using two full-bandwidth ZoomISO NDI outputs over a private network |
+| Portability | Azure is the demonstrated CPU reference; comparable Google Cloud and AWS machines are candidates until independently qualified |
 
 The public NDI result measured both 1080p29.97 sources at approximately 30 fps,
 at most one frame of skew, zero holds, skips, catch-up, restarts, alarms, and
 Core hard-counter movement. The NDI bank peaked below two CPU cores and retained
 more than 88 percent whole-host idle on the tested 16-vCPU receiver. This is a
 specific two-source video result, not a universal NDI-versus-MXL benchmark.
+HX2/HX3 PTZ senders exercised on the shared older lab host did not meet the
+strict no-skip gate. That result combined decode and host contention and does
+not isolate the codec, so those senders and that host profile remain
+unqualified.
 
 ## Public proof images
 
-The repository includes public-safe proof from the accepted demonstration. The
+The repository includes public-safe proof from the reference demonstration. The
 source canvas intentionally obscures participant imagery while preserving the
 eight-live-source topology; the controller image exposes aggregate media and
 resource telemetry without a stream key.
 
 ![Public-safe eight-source ZoomISO MXL canvas](assets/zoomiso-mxl-eight-source-public-proof.jpg)
 
-![Live 4K YouTube controller with all gates passing](assets/youtube-4k-control-live-final.jpg)
+![Live 4K YouTube controller at capture time with all readiness gates green](assets/youtube-4k-control-live-final.jpg)
 
 ## Explicit limitations
 

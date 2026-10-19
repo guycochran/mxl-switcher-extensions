@@ -21,9 +21,10 @@ stores meeting credentials or streaming credentials.
 Use a Linux host with Docker, Git, Python 3, an operator-controlled MXL runtime
 image,
 and a running licensed ZoomISO Cloud container. The demonstrated eight-source
-CPU profile used 32 modern logical CPUs and 128 GiB RAM; four sources can use a
-smaller host, but leave encoding headroom. No GPU is required for the proven
-CPU path.
+CPU profile used 32 modern logical CPUs and 128 GiB RAM. A four-source rehearsal
+on a smaller host is unqualified; proceed only when the acceptance check and
+resource sampling retain at least 20 percent whole-host CPU headroom. No GPU is
+required for the proven CPU path.
 
 ZoomISO Cloud is available from the vendor's public
 [Liminal apps page](https://liminal.zoom.us/#apps). The prerequisite guide also
