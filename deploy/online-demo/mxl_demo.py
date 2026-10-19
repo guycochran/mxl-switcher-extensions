@@ -143,7 +143,10 @@ def load_config(path: pathlib.Path) -> dict:
     cfg["layout_image"] = str(cfg.get("layout_image", "mxl-layout-compositor:online-demo"))
     cfg["layout_bank_a_port"] = int(cfg.get("layout_bank_a_port", 9721))
     cfg["layout_bank_b_port"] = int(cfg.get("layout_bank_b_port", 9722))
-    cfg["layout_bank_cpus"] = float(cfg.get("layout_bank_cpus", 4))
+    default_layout_bank_cpus = 8 if cfg["source_count"] == 8 else 4
+    cfg["layout_bank_cpus"] = float(
+        cfg.get("layout_bank_cpus", default_layout_bank_cpus)
+    )
     if not 1 <= cfg["layout_bank_cpus"] <= 16:
         raise ValueError("layout_bank_cpus must be between 1 and 16")
     cfg["config_file"] = str(path.resolve())

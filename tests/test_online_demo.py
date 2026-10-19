@@ -210,6 +210,20 @@ class OnlineDemoTests(unittest.TestCase):
         self.assertIn("--cpus 6", rendered)
         self.assertIn("--width 1280 --height 720 --rate 30000/1001", rendered)
 
+    def test_eight_source_bundle_defaults_layout_banks_to_eight_cores(self):
+        config = dict(self.config)
+        config["source_count"] = 8
+        self.config_file.write_text(json.dumps(config))
+
+        cfg = demo.load_config(self.config_file)
+
+        self.assertEqual(cfg["layout_bank_cpus"], 8)
+
+    def test_four_source_bundle_defaults_layout_banks_to_four_cores(self):
+        cfg = demo.load_config(self.config_file)
+
+        self.assertEqual(cfg["layout_bank_cpus"], 4)
+
     def test_prepare_rejects_mixed_layout_input_formats(self):
         definition = self.domain / "video-4.mxl-flow" / "flow_def.json"
         value = json.loads(definition.read_text())

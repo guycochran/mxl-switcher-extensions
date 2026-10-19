@@ -65,7 +65,11 @@ bank, places its stable flow on Preview, and then takes it to Program; undefined
 counts and under-cadence scenes fail closed. Bank geometry and grain rate are
 inherited from the discovered ZoomISO sources, and mixed source formats are
 rejected before launch. `layout_bank_cpus` sets each bank's CPU ceiling (default
-4, allowed range 1–16); increase it only on a qualified modern host.
+4 for four-source bundles and 8 for eight-source bundles, allowed range 1–16).
+The eight-source default reflects a live qualification where a four-core bank
+saturated and held only about 24 fps, while an eight-core allowance sustained
+the 8-up scene at about 30 fps. Retain that headroom unless the target host has
+been cadence-qualified with a lower ceiling.
 
 ## Capacity
 
