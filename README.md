@@ -6,6 +6,9 @@ Optional input, output, recording, and deployment integrations for
 For the guarded ZoomISO-to-Core-to-YouTube demonstration—including the
 ATEM-style operator Skin and one encoded Program/Preview/multiview confidence
 stack—start with the [end-to-end quickstart](QUICKSTART.md).
+Read the [technical-preview boundary](docs/TECHNICAL_PREVIEW.md) before using
+that demonstration as a product or production claim. It separates the proven
+single-host path from the extensions that remain experimental.
 Operators beginning with a new host should first read the
 [prerequisite onboarding guide](deploy/online-demo/PREREQUISITES.md),
 which states exactly what this public repository can and cannot install.
@@ -103,13 +106,14 @@ preventing an incompatible, stalled, or presence-only path from appearing
 healthy. The package remains below candidate maturity until content-level A/V
 timing and flow-replacement recovery gates pass.
 
-The [NDI Input Module](inputs/ndi) is now an independently supervised
-prototype. It receives one NDI source per instance, normalizes cadence before
-scaling and threaded v210 conversion, publishes optional Float32/48 kHz audio,
-and exposes the common loopback health contract. Its offline pipeline,
-validation, and bounded-restart tests pass. It remains below candidate maturity
-until the timestamp A/B, two-camera moving-picture, recovery, audio, and staged
-endurance gates in its delivery plan pass on real senders.
+The [NDI Input Module](inputs/ndi) is now a qualified prototype. Its recommended
+two-input bank uses one native shared-index writer, and its experimental
+split-copy video path passed strict 60-second and 180-second clean-host gates on
+a modern CPU receiver at approximately 30 fps with 0–1 frame of skew, zero
+holds/skips/catch-up/restarts, and zero Core hard-counter movement. That result
+does not qualify NDI audio, seamless source replacement, larger banks, or every
+codec/source combination, so the package correctly remains below candidate
+maturity.
 
 The [YouTube RTMPS output](outputs/rtmp) is a working 4K prototype with direct
 four- or eight-source MXL composition, CPU and optional NVENC profiles, a

@@ -4,6 +4,11 @@ This document is the promotion plan for the first supportable online-production
 profile. It deliberately separates a compelling demonstration from a system an
 engineer can trust on air.
 
+The current [technical preview](TECHNICAL_PREVIEW.md) is intentionally narrower
+than this promotion target. Its outsider rehearsal is the packaging gate for
+what has already been demonstrated; it does not waive the destination,
+recovery, or duration gates below.
+
 ## Product boundary
 
 MXL Switcher Core owns deterministic Program and Preview identities, switching,

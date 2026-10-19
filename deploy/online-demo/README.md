@@ -101,6 +101,8 @@ complete before this launcher takes control.
 The [cross-cloud sizing guide](CLOUD_SIZING.md) names the Azure reference and
 the comparable Google Cloud and AWS candidates, with one common acceptance
 checklist for qualifying them.
+The [outsider rehearsal](OUTSIDER_REHEARSAL.md) is the final packaging and
+documentation gate before tagging a technical-preview release candidate.
 
 `acceptance` is a read-only observation gate for a running deployment. It
 captures two snapshots, requires every owned service to remain running with

@@ -1,5 +1,10 @@
 # End-to-end ZoomISO MXL demonstration
 
+**Release scope:** this is the supported technical-preview demonstration path,
+not an unattended production appliance. Read the
+[technical-preview boundary](docs/TECHNICAL_PREVIEW.md) for the exact evidence,
+host assumptions, and open gates before making deployment claims.
+
 This is the shortest supported path from a licensed ZoomISO Cloud meeting to:
 
 - stable MXL Core Program and Preview outputs;
@@ -142,3 +147,5 @@ acceptance gates. That document also records the public-safe fresh-host smoke
 result, including bounded findings that still require a longer acceptance run.
 For a symptom-to-action guide, use
 [`deploy/online-demo/TROUBLESHOOTING.md`](deploy/online-demo/TROUBLESHOOTING.md).
+Before tagging a release candidate, run the
+[public-instructions-only outsider rehearsal](deploy/online-demo/OUTSIDER_REHEARSAL.md).
