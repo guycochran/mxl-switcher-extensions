@@ -14,7 +14,9 @@ unchanged.
 - 2-up: equal side-by-side interview
 - 3-up: one large speaker with two stacked guests
 - 4-up: 2×2 grid
+- 5-up: balanced 3-over-2 grid
 - 6-up: 3×2 grid
+- 7-up: balanced 4-over-3 grid
 - 8-up: 4×2 wall
 
 Five- and seven-box scenes are intentionally absent until they have explicit

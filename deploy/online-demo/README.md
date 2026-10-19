@@ -59,7 +59,8 @@ oldest safe slot and can become too late if the writer commits between the
 runtime snapshot and the read.
 
 The Skin's ME controls drive two portable, versioned warm layout banks. Defined
-presets are 2-up, 3-up, 4-up, 6-up, and 8-up. The operator prepares the off-air
+presets are 2-up through 8-up, including balanced 3-over-2 and 4-over-3 designs
+for 5-up and 7-up. The operator prepares the off-air
 bank, places its stable flow on Preview, and then takes it to Program; undefined
 counts and under-cadence scenes fail closed. Bank geometry and grain rate are
 inherited from the discovered ZoomISO sources, and mixed source formats are

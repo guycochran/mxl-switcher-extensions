@@ -33,7 +33,7 @@ class SceneEngine:
 
     def _validate(self, count: int, sources: list[int]) -> None:
         if count not in SUPPORTED_LAYOUTS or len(sources) != count:
-            raise ValueError("layout must contain 2, 3, 4, 6, or 8 sources")
+            raise ValueError("layout must contain between 2 and 8 sources")
         if len(set(sources)) != count or any(source < 1 or source > len(self.args.input) for source in sources):
             raise ValueError(f"sources must be unique numbers from 1 through {len(self.args.input)}")
 

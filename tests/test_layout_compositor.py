@@ -34,9 +34,17 @@ class LayoutCompositorTests(unittest.TestCase):
             self.assertEqual(area, 1920 * 1080)
 
     def test_only_defined_templates_are_accepted(self):
-        for count in (1, 5, 7, 9):
+        for count in (1, 9):
             with self.assertRaises(ValueError):
                 layout.layout_tiles(count)
+
+    def test_five_and_seven_use_balanced_rows(self):
+        five = layout.layout_tiles(5)
+        self.assertEqual([(tile.width, tile.height) for tile in five[:3]], [(640, 540)] * 3)
+        self.assertEqual([(tile.width, tile.height) for tile in five[3:]], [(960, 540)] * 2)
+        seven = layout.layout_tiles(7)
+        self.assertEqual([(tile.width, tile.height) for tile in seven[:4]], [(480, 540)] * 4)
+        self.assertEqual([(tile.width, tile.height) for tile in seven[4:]], [(640, 540)] * 3)
 
     def test_pipeline_reads_each_source_and_publishes_one_paced_flow(self):
         args = argparse.Namespace(
