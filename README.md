@@ -9,6 +9,8 @@ stack—start with the [end-to-end quickstart](QUICKSTART.md).
 Read the [technical-preview boundary](docs/TECHNICAL_PREVIEW.md) before using
 that demonstration as a product or production claim. It separates the proven
 single-host path from the extensions that remain experimental.
+For a bounded workflow evaluation, see the
+[design-partner pilot](docs/DESIGN_PARTNER_PILOT.md).
 Operators beginning with a new host should first read the
 [prerequisite onboarding guide](deploy/online-demo/PREREQUISITES.md),
 which states exactly what this public repository can and cannot install.

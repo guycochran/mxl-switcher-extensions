@@ -101,3 +101,7 @@ feedback. The likely choices are either objective Program-return A/V acceptance
 or NDI audio plus deterministic source-replacement recovery. Until a concrete
 pilot identifies one of those as a blocker, the project prioritizes packaging,
 proof, and operator feedback over another speculative runtime track.
+
+Organizations evaluating a real workflow can use the
+[design-partner pilot](DESIGN_PARTNER_PILOT.md) to define a bounded decision and
+its acceptance evidence.
