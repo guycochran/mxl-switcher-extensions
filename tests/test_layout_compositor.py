@@ -53,6 +53,29 @@ class LayoutCompositorTests(unittest.TestCase):
         self.assertIn("sink_0::sizing-policy=keep-aspect-ratio", value)
         self.assertNotIn("videoconvert", value)
 
+    def test_supervisor_readiness_requires_cadence_and_every_input(self):
+        sys.path.insert(0, str(MODULE_DIR))
+        try:
+            supervisor = load("scene_supervisor")
+        finally:
+            sys.path.remove(str(MODULE_DIR))
+        args = argparse.Namespace(
+            bank="a", input=["one", "two"], minimum_output_fps=27,
+            cadence_window=2,
+        )
+        engine = supervisor.SceneEngine(args)
+        engine.generation = 1
+        engine.pending_count = 2
+        child = mock.MagicMock()
+        child.stdout = iter([
+            '{"event":"health","output_ticks":60,"average_output_fps":30,"input_ticks":[60,0],"output_window_s":2}\n',
+            '{"event":"health","output_ticks":62,"average_output_fps":10,"input_ticks":[62,62],"output_window_s":3}\n',
+            '{"event":"health","output_ticks":120,"average_output_fps":29.9,"input_ticks":[120,120],"output_window_s":4}\n',
+        ])
+        engine._copy_output(child, 1)
+        self.assertTrue(engine.ready)
+        self.assertEqual(engine.output_fps, 29.9)
+
     def test_bank_client_is_loopback_only_and_posts_exact_scene(self):
         sys.path.insert(0, str(MODULE_DIR))
         try:

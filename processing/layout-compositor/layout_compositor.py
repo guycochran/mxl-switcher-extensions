@@ -100,6 +100,7 @@ class Compositor:
         self.started = time.monotonic()
         self.last_report = self.started
         self.last_output_ticks = 0
+        self.first_output_at: float | None = None
 
     @staticmethod
     def _load_gst():
@@ -112,6 +113,8 @@ class Compositor:
     def _probe(self, index: int | None):
         def count(_pad, _info):
             if index is None:
+                if self.first_output_at is None:
+                    self.first_output_at = time.monotonic()
                 self.output_ticks += 1
             else:
                 self.input_ticks[index] += 1
@@ -122,9 +125,15 @@ class Compositor:
         now = time.monotonic()
         elapsed = max(0.001, now - self.last_report)
         fps = (self.output_ticks - self.last_output_ticks) / elapsed
+        output_window = 0.0 if self.first_output_at is None else now - self.first_output_at
+        average_output_fps = (
+            0.0 if output_window <= 0 else max(0, self.output_ticks - 1) / output_window
+        )
         print(json.dumps({
             "event": "health", "state": "ready" if self.output_ticks else "starting",
             "output_ticks": self.output_ticks, "output_fps": round(fps, 3),
+            "average_output_fps": round(average_output_fps, 3),
+            "output_window_s": round(output_window, 3),
             "input_ticks": list(self.input_ticks), "uptime_s": round(now - self.started, 3),
         }, separators=(",", ":")), flush=True)
         self.last_report, self.last_output_ticks = now, self.output_ticks

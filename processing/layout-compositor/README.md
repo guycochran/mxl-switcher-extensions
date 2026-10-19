@@ -33,6 +33,11 @@ The bank replaces only its compositor child when its off-air scene changes.
 The output flow identity remains stable so Core can keep the bank registered as
 `supersource-a` or `supersource-b`.
 
+Readiness is cadence-qualified, not presence-only. The default requires every
+selected input to advance and the composed output to average at least 27 fps
+over a two-second window. A resource-starved host therefore refuses the scene
+instead of placing a stuttering layout in Preview.
+
 Use the guarded `deploy/online-demo/mxl_demo.py` lifecycle rather than launching
 these files by hand. The launcher discovers current sources, generates stable
 deployment-local bank flow IDs, owns both bank containers, enables the Skin
@@ -41,6 +46,11 @@ helper, verifies readiness, and removes only its labelled containers.
 ## Current acceptance boundary
 
 The pure layout, pipeline, loopback-client, deployment-plan, validation, and
-safe-bank tests run offline. A real-source gate must still demonstrate each
-preset advancing at target cadence with zero Core hard-counter movement before
-this extension moves beyond prototype maturity.
+safe-bank tests run offline. A real-source functional gate on a legacy CPU host
+proved that all five presets build and publish stable MXL output, with scene
+replacement readiness in 0.7–1.8 seconds. The same run also proved that the
+four-core cap is insufficient for larger layouts: measured output declined
+from about 11 fps at 3-up to about 4 fps at 8-up while the container saturated
+its allowance. That host/profile is a documented no-go. A modern CPU gate must
+still demonstrate every preset at target cadence with zero Core hard-counter
+movement before this extension moves beyond prototype maturity.

@@ -28,6 +28,8 @@ class SceneEngine:
         self.last_ready_ms = 0
         self.last_error = ""
         self.output_ticks = 0
+        self.output_fps = 0.0
+        self.pending_count = 0
 
     def _validate(self, count: int, sources: list[int]) -> None:
         if count not in SUPPORTED_LAYOUTS or len(sources) != count:
@@ -60,7 +62,14 @@ class SceneEngine:
                     continue
                 if event.get("event") == "health":
                     self.output_ticks = int(event.get("output_ticks", 0))
-                    self.ready = self.output_ticks > 0
+                    self.output_fps = float(event.get("average_output_fps", 0))
+                    inputs = event.get("input_ticks", [])
+                    self.ready = (
+                        float(event.get("output_window_s", 0)) >= self.args.cadence_window
+                        and self.output_fps >= self.args.minimum_output_fps
+                        and len(inputs) == int(self.pending_count)
+                        and all(int(value) > 0 for value in inputs)
+                    )
                 elif event.get("event") in {"fatal", "output_eos"}:
                     self.last_error = line.strip()
                     self.ready = False
@@ -79,6 +88,8 @@ class SceneEngine:
                 generation = self.generation
                 self.ready = False
                 self.output_ticks = 0
+                self.output_fps = 0.0
+                self.pending_count = count
                 self.last_error = ""
             if old is not None and old.poll() is None:
                 old.terminate()
@@ -126,6 +137,7 @@ class SceneEngine:
                 "sources": self.scene["sources"], "state": "ready" if live else "starting",
                 "ready": live, "revision": self.generation, "ready_ms": self.last_ready_ms,
                 "output_ticks": self.output_ticks,
+                "output_fps": self.output_fps,
                 "child_pid": child.pid if child and child.poll() is None else None,
                 "last_error": self.last_error,
             }
@@ -197,6 +209,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--control-host", default="127.0.0.1")
     result.add_argument("--control-port", type=int, default=9720)
     result.add_argument("--ready-timeout", type=float, default=12)
+    result.add_argument("--cadence-window", type=float, default=2)
+    result.add_argument("--minimum-output-fps", type=float, default=27)
     result.add_argument("--initial-count", type=int, required=True)
     result.add_argument("--initial-sources", required=True)
     return result
