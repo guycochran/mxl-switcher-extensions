@@ -149,6 +149,10 @@ class OnlineDemoTests(unittest.TestCase):
         self.assertIn("input_delay_frames=1", (state / "core.conf").read_text())
         program = json.loads((state / "definitions" / "program.json").read_text())
         self.assertEqual(program["id"], first["program_flow_id"])
+        self.assertEqual(first["frame_width"], 1920)
+        self.assertEqual(first["frame_height"], 1080)
+        self.assertEqual(first["rate_numerator"], 30)
+        self.assertEqual(first["rate_denominator"], 1)
 
     def test_prepare_defaults_to_qualified_two_frame_presentation_delay(self):
         value = dict(self.config)
@@ -183,6 +187,45 @@ class OnlineDemoTests(unittest.TestCase):
         self.assertIn("test-demo-layout-a", rendered)
         self.assertIn("test-demo-layout-b", rendered)
         self.assertIn("--initial-sources 1,2", rendered)
+        self.assertIn("--width 1920 --height 1080 --rate 30/1", rendered)
+        self.assertIn("--cpus 4", rendered)
+
+    def test_layout_banks_inherit_source_geometry_rate_and_cpu_budget(self):
+        for number in range(1, 5):
+            definition = self.domain / f"video-{number}.mxl-flow" / "flow_def.json"
+            value = json.loads(definition.read_text())
+            value.update({
+                "frame_width": 1280,
+                "frame_height": 720,
+                "grain_rate": {"numerator": 30000, "denominator": 1001},
+            })
+            definition.write_text(json.dumps(value))
+        config = dict(self.config)
+        config["layout_bank_cpus"] = 6
+        self.config_file.write_text(json.dumps(config))
+
+        cfg = demo.load_config(self.config_file)
+        rendered = "\n".join(demo.quote(command) for command in demo.commands(cfg, demo.prepare(cfg)))
+
+        self.assertIn("--cpus 6", rendered)
+        self.assertIn("--width 1280 --height 720 --rate 30000/1001", rendered)
+
+    def test_prepare_rejects_mixed_layout_input_formats(self):
+        definition = self.domain / "video-4.mxl-flow" / "flow_def.json"
+        value = json.loads(definition.read_text())
+        value["grain_rate"] = {"numerator": 30000, "denominator": 1001}
+        definition.write_text(json.dumps(value))
+
+        with self.assertRaisesRegex(RuntimeError, "layout inputs must share"):
+            demo.prepare(demo.load_config(self.config_file))
+
+    def test_layout_bank_cpu_budget_is_bounded(self):
+        for invalid in (0, 17):
+            config = dict(self.config)
+            config["layout_bank_cpus"] = invalid
+            self.config_file.write_text(json.dumps(config))
+            with self.assertRaisesRegex(ValueError, "layout_bank_cpus"):
+                demo.load_config(self.config_file)
 
     def test_containers_are_labelled_and_never_auto_restart(self):
         cfg = demo.load_config(self.config_file)
@@ -438,6 +481,10 @@ class OnlineDemoTests(unittest.TestCase):
             "containers": {suffix: "running|0|test-demo" for suffix in demo.OWNED_SUFFIXES},
             "core": {**{key: 0 for key in demo.HARD_COUNTERS}, "status": "running", "routed": 100},
             "youtube": {"source_count": 4, "audio_ready": True, "running": False},
+            "layouts": {
+                "a": {"ready": True, "output_fps": 30, "output_ticks": 100},
+                "b": {"ready": True, "output_fps": 30, "output_ticks": 100},
+            },
             "confidence": {
                 suffix: {"frames": 10, "encoder_restarts": 0, "sources": {"one": source}}
                 for suffix in ("program-confidence", "preview-confidence", "multiview-confidence")
@@ -445,6 +492,8 @@ class OnlineDemoTests(unittest.TestCase):
         }
         after = json.loads(json.dumps(before))
         after["core"]["routed"] = 200
+        after["layouts"]["a"]["output_ticks"] = 200
+        after["layouts"]["b"]["output_ticks"] = 200
         for item in after["confidence"].values():
             item["frames"] = 20
         result = demo.evaluate_acceptance(before, after, 4)
@@ -458,6 +507,10 @@ class OnlineDemoTests(unittest.TestCase):
             "core": {**{key: 0 for key in demo.HARD_COUNTERS}, "status": "running", "routed": 100},
             "youtube": {"source_count": 4, "audio_ready": True, "running": True,
                         "output": {"ready": True}},
+            "layouts": {
+                "a": {"ready": True, "output_fps": 30, "output_ticks": 100},
+                "b": {"ready": True, "output_fps": 30, "output_ticks": 100},
+            },
             "confidence": {
                 suffix: {"frames": 10, "encoder_restarts": 0, "sources": {"one": source}}
                 for suffix in ("program-confidence", "preview-confidence", "multiview-confidence")
@@ -465,6 +518,8 @@ class OnlineDemoTests(unittest.TestCase):
         }
         after = json.loads(json.dumps(before))
         after["core"]["routed"] = 200
+        after["layouts"]["a"]["output_ticks"] = 200
+        after["layouts"]["b"]["output_ticks"] = 200
         after["core"]["too_late"] = 1
         for item in after["confidence"].values():
             item["frames"] = 20

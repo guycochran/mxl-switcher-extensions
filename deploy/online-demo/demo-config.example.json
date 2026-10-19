@@ -17,6 +17,7 @@
   "skin_port": 9710,
   "layout_bank_a_port": 9721,
   "layout_bank_b_port": 9722,
+  "layout_bank_cpus": 4,
   "youtube_port": 18123,
   "rtmp_port": 1935,
   "mediamtx_api_port": 9997,

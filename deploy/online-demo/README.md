@@ -58,19 +58,23 @@ ring. Do not increase it casually: a three-frame effective delay reaches the
 oldest safe slot and can become too late if the writer commits between the
 runtime snapshot and the read.
 
-The Skin also contains ME/SuperSource controls, but the default portable bundle
-does not enable them. The original warm-bank helper depends on compositor files
-that were host-local in the lab. The controls fail closed until a portable,
-versioned compositor package is supplied. This is deliberate: a reproducible
-direct switcher is better than a button that silently invokes missing software.
+The Skin's ME controls drive two portable, versioned warm layout banks. Defined
+presets are 2-up, 3-up, 4-up, 6-up, and 8-up. The operator prepares the off-air
+bank, places its stable flow on Preview, and then takes it to Program; undefined
+counts and under-cadence scenes fail closed. Bank geometry and grain rate are
+inherited from the discovered ZoomISO sources, and mixed source formats are
+rejected before launch. `layout_bank_cpus` sets each bank's CPU ceiling (default
+4, allowed range 1–16); increase it only on a qualified modern host.
 
 ## Capacity
 
 The demonstrated CPU-only 4K run used about 14.05–15.84 of 32 logical CPUs for
 ZoomISO plus the output adapter. The separate confidence stack measured about
 1.8–2.0 logical CPUs on an older host. Start with 32 modern logical CPUs and
-leave headroom; at lower capacity, reduce or disable confidence monitoring
-before compromising Program.
+leave headroom. A legacy host saturated a four-core bank and could not sustain
+the multi-box presets, so cadence-qualified layout acceptance on the target host
+is mandatory. At lower capacity, reduce or disable confidence monitoring before
+compromising Program.
 
 ## Commands
 

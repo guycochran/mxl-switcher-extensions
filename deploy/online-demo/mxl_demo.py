@@ -143,6 +143,9 @@ def load_config(path: pathlib.Path) -> dict:
     cfg["layout_image"] = str(cfg.get("layout_image", "mxl-layout-compositor:online-demo"))
     cfg["layout_bank_a_port"] = int(cfg.get("layout_bank_a_port", 9721))
     cfg["layout_bank_b_port"] = int(cfg.get("layout_bank_b_port", 9722))
+    cfg["layout_bank_cpus"] = float(cfg.get("layout_bank_cpus", 4))
+    if not 1 <= cfg["layout_bank_cpus"] <= 16:
+        raise ValueError("layout_bank_cpus must be between 1 and 16")
     cfg["config_file"] = str(path.resolve())
     cfg["state_dir"] = str(config_path(str(cfg["state_dir"]), path.parent))
     cfg["domain_host_path"] = str(config_path(str(cfg["domain_host_path"]), path.parent))
@@ -425,6 +428,25 @@ def prepare(cfg: dict) -> dict:
     layout_a_id = str(uuid.uuid5(namespace, cfg["deployment_id"] + ":layout-a"))
     layout_b_id = str(uuid.uuid5(namespace, cfg["deployment_id"] + ":layout-b"))
     source_definition = sources[0]["definition"]
+    source_format = (
+        int(source_definition.get("frame_width", 1920)),
+        int(source_definition.get("frame_height", 1080)),
+        int(source_definition.get("grain_rate", {}).get("numerator", 30)),
+        int(source_definition.get("grain_rate", {}).get("denominator", 1)),
+    )
+    for source in sources[1:]:
+        definition = source["definition"]
+        candidate = (
+            int(definition.get("frame_width", 1920)),
+            int(definition.get("frame_height", 1080)),
+            int(definition.get("grain_rate", {}).get("numerator", 30)),
+            int(definition.get("grain_rate", {}).get("denominator", 1)),
+        )
+        if candidate != source_format:
+            raise RuntimeError(
+                "layout inputs must share one width, height, and grain rate; "
+                f"source {source['number']} is {candidate}, expected {source_format}"
+            )
     program = output_definition(source_definition, program_id, "MXL Demo Program", "MXLDemoProgram:Video")
     preview = output_definition(source_definition, preview_id, "MXL Demo Preview", "MXLDemoPreview:Video")
     layout_a = output_definition(source_definition, layout_a_id, "MXL Layout Bank A", "MXLLayoutA:Video")
@@ -479,6 +501,10 @@ def prepare(cfg: dict) -> dict:
         "preview_flow_id": preview_id,
         "layout_a_flow_id": layout_a_id,
         "layout_b_flow_id": layout_b_id,
+        "frame_width": int(source_definition.get("frame_width", 1920)),
+        "frame_height": int(source_definition.get("frame_height", 1080)),
+        "rate_numerator": int(rate.get("numerator", 30)),
+        "rate_denominator": int(rate.get("denominator", 1)),
         "sources": [{k: source[k] for k in ("number", "flow_id", "audio_flow_id")} for source in sources],
     }
     temporary = state / "resolved.json.new"
@@ -694,7 +720,7 @@ def commands(cfg: dict, resolved: dict) -> list[list[str]]:
     ):
         command = docker(
             cfg, "run", "-d", "--name", names[f"layout-{bank}"], *common,
-            "--network", "host", "--cpus", "4", "-v", mount,
+            "--network", "host", "--cpus", f"{cfg['layout_bank_cpus']:g}", "-v", mount,
             cfg["layout_image"], "--bank", bank, "--domain", "/mxl-domain",
         )
         for source in resolved["sources"]:
@@ -702,7 +728,9 @@ def commands(cfg: dict, resolved: dict) -> list[list[str]]:
         command.extend([
             "--output-flow-id", output_flow,
             "--compositor", "/opt/mxl-layout-compositor/layout_compositor.py",
-            "--width", "1920", "--height", "1080", "--rate", "30000/1001",
+            "--width", str(resolved["frame_width"]),
+            "--height", str(resolved["frame_height"]),
+            "--rate", f"{resolved['rate_numerator']}/{resolved['rate_denominator']}",
             "--control-host", "127.0.0.1", "--control-port", str(port),
             "--initial-count", "2", "--initial-sources", ",".join(selected),
         ])
@@ -876,6 +904,13 @@ def acceptance_snapshot(cfg: dict) -> dict:
         "containers": containers,
         "core": url_json(f"http://127.0.0.1:{cfg['core_port']}/api/mxl/v1/health"),
         "youtube": url_json(f"http://127.0.0.1:{cfg['youtube_port']}/api/state"),
+        "layouts": {
+            bank: url_json(f"http://127.0.0.1:{port}/api/v1/state")
+            for bank, port in (
+                ("a", cfg["layout_bank_a_port"]),
+                ("b", cfg["layout_bank_b_port"]),
+            )
+        },
         "confidence": confidence,
     }
 
@@ -899,6 +934,12 @@ def evaluate_acceptance(before: dict, after: dict, source_count: int,
     }
     checks["core_hard_counters_unchanged"] = all(value == 0 for value in deltas.values())
     checks["core_hard_counters_zero"] = all(int(after["core"].get(key, 0)) == 0 for key in HARD_COUNTERS)
+    checks["layout_banks_ready_at_cadence"] = all(
+        bool(final.get("ready"))
+        and float(final.get("output_fps", 0)) >= 27
+        and int(final.get("output_ticks", 0)) > int(before["layouts"][bank].get("output_ticks", 0))
+        for bank, final in after["layouts"].items()
+    )
     confidence = {}
     for suffix, final in after["confidence"].items():
         first = before["confidence"][suffix]
