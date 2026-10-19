@@ -166,7 +166,7 @@ class OnlineDemoTests(unittest.TestCase):
         resolved = demo.prepare(cfg)
         commands = demo.commands(cfg, resolved)
         rendered = "\n".join(demo.quote(command) for command in commands)
-        self.assertEqual(len(commands), 7)
+        self.assertEqual(len(commands), 9)
         self.assertIn("http://127.0.0.1:18085/api/mxl/v1/health", rendered)
         self.assertIn("--health-start-period 10s", rendered)
         self.assertIn("test-demo-multiview-confidence", rendered)
@@ -179,7 +179,10 @@ class OnlineDemoTests(unittest.TestCase):
         self.assertIn("--mix-source-audio", rendered)
         self.assertEqual(rendered.count("--preferred-flow"), 4)
         self.assertNotIn("stream-key", rendered)
-        self.assertNotIn("supersource-helper", rendered)
+        self.assertIn("--supersource-helper /opt/mxl-operator/layout_bank_client.py", rendered)
+        self.assertIn("test-demo-layout-a", rendered)
+        self.assertIn("test-demo-layout-b", rendered)
+        self.assertIn("--initial-sources 1,2", rendered)
 
     def test_containers_are_labelled_and_never_auto_restart(self):
         cfg = demo.load_config(self.config_file)
@@ -423,7 +426,7 @@ class OnlineDemoTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "test-demo-multiview-confidence \\(exited\\|0\\)"):
                 demo.launch(cfg, apply=True)
         self.assertEqual(len(removed), 1)
-        self.assertEqual(len(removed[0]) - 3, 7, "all seven started containers must be removed")
+        self.assertEqual(len(removed[0]) - 3, 9, "all nine started containers must be removed")
         log = pathlib.Path(cfg["state_dir"]) / "launch-failure-test-demo-multiview-confidence.log"
         self.assertEqual(log.read_text(), "missing flow\n")
         self.assertEqual(demo.parse_args(["check"]).config, pathlib.Path("demo-config.json"))

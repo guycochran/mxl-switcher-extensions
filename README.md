@@ -37,6 +37,7 @@ requires.
 common/                 shared lifecycle, health, and manifest conventions
 inputs/                 transport or device -> stable MXL flow
 outputs/                stable MXL Program Master -> destination
+processing/             stable MXL flows -> derived in-domain MXL flows
 recording/              file and time-addressable recording/replay
 profiles/               audience-specific deployment selections
 schemas/                machine-readable extension contracts

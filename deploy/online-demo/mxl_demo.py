@@ -25,7 +25,7 @@ AUDIO_LABEL = re.compile(r"^ZoomISO Cloud Instance Output (\d+) Audio$")
 SAFE_NAME = re.compile(r"^[a-z][a-z0-9-]{2,40}$")
 OWNED_SUFFIXES = (
     "core", "mediamtx", "program-confidence", "preview-confidence",
-    "multiview-confidence", "skin", "youtube",
+    "multiview-confidence", "layout-a", "layout-b", "skin", "youtube",
 )
 # Every container this launcher creates carries this label. Names alone are not
 # proof of ownership: an unrelated service may already use the same prefix.
@@ -94,7 +94,7 @@ try:
     if Gst.version() < (1, 24, 0, 0):
         missing.append("gstreamer:1.24+")
     required = (
-        "mxlsrc", "appsrc", "queue", "identity", "x264enc", "h264parse", "flvmux",
+        "mxlsrc", "mxlsink", "appsrc", "queue", "identity", "x264enc", "h264parse", "flvmux",
         "rtmpsink", "rtmp2sink", "compositor", "videoscale", "videoconvert",
         "videotestsrc", "cairooverlay", "audiomixer", "audioconvert",
         "audioresample", "rglimiter", "avenc_aac", "aacparse",
@@ -140,6 +140,9 @@ def load_config(path: pathlib.Path) -> dict:
         raise ValueError("deployment_id must be a lowercase Docker-safe name")
     if cfg["source_count"] not in (4, 8):
         raise ValueError("source_count must be 4 or 8")
+    cfg["layout_image"] = str(cfg.get("layout_image", "mxl-layout-compositor:online-demo"))
+    cfg["layout_bank_a_port"] = int(cfg.get("layout_bank_a_port", 9721))
+    cfg["layout_bank_b_port"] = int(cfg.get("layout_bank_b_port", 9722))
     cfg["config_file"] = str(path.resolve())
     cfg["state_dir"] = str(config_path(str(cfg["state_dir"]), path.parent))
     cfg["domain_host_path"] = str(config_path(str(cfg["domain_host_path"]), path.parent))
@@ -158,6 +161,7 @@ def load_config(path: pathlib.Path) -> dict:
     port_keys = (
         "core_port", "skin_port", "youtube_port", "rtmp_port",
         "mediamtx_api_port", "webrtc_port", "ice_tcp_port",
+        "layout_bank_a_port", "layout_bank_b_port",
     )
     for key in port_keys:
         port = int(cfg[key])
@@ -418,15 +422,25 @@ def prepare(cfg: dict) -> dict:
     namespace = uuid.uuid5(uuid.NAMESPACE_URL, "https://github.com/guycochran/mxl-switcher-extensions")
     program_id = str(uuid.uuid5(namespace, cfg["deployment_id"] + ":program"))
     preview_id = str(uuid.uuid5(namespace, cfg["deployment_id"] + ":preview"))
+    layout_a_id = str(uuid.uuid5(namespace, cfg["deployment_id"] + ":layout-a"))
+    layout_b_id = str(uuid.uuid5(namespace, cfg["deployment_id"] + ":layout-b"))
     source_definition = sources[0]["definition"]
     program = output_definition(source_definition, program_id, "MXL Demo Program", "MXLDemoProgram:Video")
     preview = output_definition(source_definition, preview_id, "MXL Demo Preview", "MXLDemoPreview:Video")
+    layout_a = output_definition(source_definition, layout_a_id, "MXL Layout Bank A", "MXLLayoutA:Video")
+    layout_b = output_definition(source_definition, layout_b_id, "MXL Layout Bank B", "MXLLayoutB:Video")
     (definitions / "program.json").write_text(json.dumps(program, indent=2) + "\n", encoding="utf-8")
     (definitions / "preview.json").write_text(json.dumps(preview, indent=2) + "\n", encoding="utf-8")
+    (definitions / "layout-a.json").write_text(json.dumps(layout_a, indent=2) + "\n", encoding="utf-8")
+    (definitions / "layout-b.json").write_text(json.dumps(layout_b, indent=2) + "\n", encoding="utf-8")
     rate = source_definition.get("grain_rate", {"numerator": 30, "denominator": 1})
     lines = ["domain=/mxl-domain"]
     for index, source in enumerate(sources, 1):
         lines.append(f"source=zoomiso-{index}|{source['flow_id']}|ZoomISO {index}")
+    lines.extend([
+        f"source=supersource-a|{layout_a_id}|Layout Bank A",
+        f"source=supersource-b|{layout_b_id}|Layout Bank B",
+    ])
     lines.extend([
         "program_definition=/etc/mxl-switcher-core/definitions/program.json",
         f"program_id={program_id}",
@@ -463,6 +477,8 @@ def prepare(cfg: dict) -> dict:
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "program_flow_id": program_id,
         "preview_flow_id": preview_id,
+        "layout_a_flow_id": layout_a_id,
+        "layout_b_flow_id": layout_b_id,
         "sources": [{k: source[k] for k in ("number", "flow_id", "audio_flow_id")} for source in sources],
     }
     temporary = state / "resolved.json.new"
@@ -521,7 +537,7 @@ def doctor(cfg: dict, strict_images: bool = False) -> int:
         failures += not ok
     for image in (
         cfg["base_image"], cfg["mediamtx_image"], cfg["core_image"],
-        cfg["operator_image"], cfg["youtube_image"],
+        cfg["operator_image"], cfg["layout_image"], cfg["youtube_image"],
     ):
         ok = docker_ok and image_exists(cfg, image)
         level = "PASS" if ok else ("FAIL" if strict_images or image == cfg["base_image"] else "WARN")
@@ -572,9 +588,16 @@ def bootstrap(cfg: dict, apply: bool) -> None:
     run(docker(cfg, "build", "--pull=false", "-t", cfg["core_image"],
                "--build-arg", f"BASE_IMAGE={cfg['base_image']}",
                "-f", str(core / "packaging/easy-mxl/Dockerfile.runtime"), str(core)))
-    run(docker(cfg, "build", "--pull=false", "-t", cfg["operator_image"],
+    operator_base = cfg["operator_image"] + "-core-base"
+    run(docker(cfg, "build", "--pull=false", "-t", operator_base,
                "--build-arg", f"BASE_IMAGE={cfg['base_image']}",
                "-f", str(ROOT / "deploy/online-demo/Dockerfile.operator"), str(core)))
+    run(docker(cfg, "build", "--pull=false", "-t", cfg["operator_image"],
+               "--build-arg", f"OPERATOR_BASE={operator_base}",
+               "-f", str(ROOT / "deploy/online-demo/Dockerfile.operator-layout"), str(ROOT)))
+    run(docker(cfg, "build", "--pull=false", "-t", cfg["layout_image"],
+               "--build-arg", f"BASE_IMAGE={cfg['base_image']}",
+               "-f", str(ROOT / "processing/layout-compositor/Dockerfile"), str(ROOT)))
     run(docker(cfg, "build", "--pull=false", "-t", cfg["youtube_image"],
                "--build-arg", f"BASE_IMAGE={cfg['base_image']}",
                "-f", str(ROOT / "outputs/rtmp/Dockerfile.cpu"), str(ROOT)))
@@ -602,6 +625,7 @@ def ensure_no_conflicts(cfg: dict) -> None:
     for key in (
         "core_port", "skin_port", "youtube_port", "rtmp_port",
         "mediamtx_api_port", "webrtc_port", "ice_tcp_port",
+        "layout_bank_a_port", "layout_bank_b_port",
     ):
         if not port_free(cfg[key]):
             raise RuntimeError(f"port {cfg[key]} ({key}) is already occupied")
@@ -659,10 +683,37 @@ def commands(cfg: dict, resolved: dict) -> list[list[str]]:
         for label, flow in inputs:
             command.extend(["--input", f"{label}={flow}"])
         result.append(command)
+    initial = ["1", "2"]
+    if len(resolved["sources"]) >= 4:
+        second_initial = ["3", "4"]
+    else:
+        second_initial = initial
+    for bank, port, output_flow, selected in (
+        ("a", cfg["layout_bank_a_port"], resolved["layout_a_flow_id"], initial),
+        ("b", cfg["layout_bank_b_port"], resolved["layout_b_flow_id"], second_initial),
+    ):
+        command = docker(
+            cfg, "run", "-d", "--name", names[f"layout-{bank}"], *common,
+            "--network", "host", "--cpus", "4", "-v", mount,
+            cfg["layout_image"], "--bank", bank, "--domain", "/mxl-domain",
+        )
+        for source in resolved["sources"]:
+            command.extend(["--input", source["flow_id"]])
+        command.extend([
+            "--output-flow-id", output_flow,
+            "--compositor", "/opt/mxl-layout-compositor/layout_compositor.py",
+            "--width", "1920", "--height", "1080", "--rate", "30000/1001",
+            "--control-host", "127.0.0.1", "--control-port", str(port),
+            "--initial-count", "2", "--initial-sources", ",".join(selected),
+        ])
+        result.append(command)
     result.extend([
         docker(cfg, "run", "-d", "--name", names["skin"], *common, "--network", "host",
+               "-e", f"MXL_LAYOUT_BANK_A_URL=http://127.0.0.1:{cfg['layout_bank_a_port']}",
+               "-e", f"MXL_LAYOUT_BANK_B_URL=http://127.0.0.1:{cfg['layout_bank_b_port']}",
                cfg["operator_image"], "/opt/mxl-operator/server.py",
                "--port", str(cfg["skin_port"]), "--core", f"http://127.0.0.1:{cfg['core_port']}",
+               "--supersource-helper", "/opt/mxl-operator/layout_bank_client.py",
                "--program-url", f"{cfg['confidence_browser_base']}/mxl-program/",
                "--preview-url", f"{cfg['confidence_browser_base']}/mxl-preview/",
                "--multiview-url", f"{cfg['confidence_browser_base']}/mxl-multiview/"),
@@ -695,6 +746,8 @@ def launch(cfg: dict, apply: bool) -> None:
             elif index == 1:
                 wait_url(f"http://127.0.0.1:{cfg['mediamtx_api_port']}/v3/config/global/get", 20)
         wait_url(f"http://127.0.0.1:{cfg['skin_port']}/api/skin/state", 20)
+        wait_url(f"http://127.0.0.1:{cfg['layout_bank_a_port']}/api/v1/health/ready", 20)
+        wait_url(f"http://127.0.0.1:{cfg['layout_bank_b_port']}/api/v1/health/ready", 20)
         wait_url(f"http://127.0.0.1:{cfg['youtube_port']}/api/state", 20)
         verify_started(cfg, started)
     except Exception:
@@ -764,6 +817,8 @@ def status(cfg: dict) -> int:
     for label, url in (
         ("core", f"http://127.0.0.1:{cfg['core_port']}/api/mxl/v1/health"),
         ("mediamtx", f"http://127.0.0.1:{cfg['mediamtx_api_port']}/v3/config/global/get"),
+        ("layout-a", f"http://127.0.0.1:{cfg['layout_bank_a_port']}/api/v1/health/ready"),
+        ("layout-b", f"http://127.0.0.1:{cfg['layout_bank_b_port']}/api/v1/health/ready"),
         ("skin", f"http://127.0.0.1:{cfg['skin_port']}/api/skin/state"),
         ("youtube", f"http://127.0.0.1:{cfg['youtube_port']}/api/state"),
     ):

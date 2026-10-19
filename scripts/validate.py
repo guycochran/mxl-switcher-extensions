@@ -13,7 +13,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 NAME = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
 VERS = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$")
 MATURITY = {"concept", "prototype", "candidate", "accepted"}
-KINDS = {"input", "output", "recorder", "playout", "operator_surface"}
+KINDS = {"input", "output", "processor", "recorder", "playout", "operator_surface"}
 API_PATH = re.compile(r"^/api/v1/[a-z0-9_./-]+$")
 
 

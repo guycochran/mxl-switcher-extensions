@@ -20,7 +20,7 @@
     "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
     "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
     "kind": {
-      "enum": ["input", "output", "recorder", "playout", "operator_surface"]
+      "enum": ["input", "output", "processor", "recorder", "playout", "operator_surface"]
     },
     "maturity": {"enum": ["concept", "prototype", "candidate", "accepted"]},
     "requires_core_api": {"type": "string", "minLength": 1},

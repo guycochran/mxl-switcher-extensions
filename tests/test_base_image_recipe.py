@@ -12,7 +12,7 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(demo)
 
 # Ubuntu 24.04 package that provides each element the launcher's contract probe
-# requires (`mxlsrc` comes from the recipe's own gst-mxl-rs build).
+# requires (`mxlsrc` and `mxlsink` come from the recipe's own gst-mxl-rs build).
 ELEMENT_PACKAGE = {
     "appsrc": "gstreamer1.0-plugins-base", "queue": "gstreamer1.0-tools",
     "identity": "gstreamer1.0-tools", "x264enc": "gstreamer1.0-plugins-ugly",
@@ -46,10 +46,10 @@ class BaseImageRecipeTests(unittest.TestCase):
         for element, package in ELEMENT_PACKAGE.items():
             if element in listed:
                 self.assertIn(package, self.dockerfile, element)
-        self.assertIn("mxlsrc", listed)
+        self.assertTrue({"mxlsrc", "mxlsink"}.issubset(listed))
         for element in listed:
             # A new contract element must be mapped to a recipe package here.
-            self.assertTrue(element == "mxlsrc" or element in ELEMENT_PACKAGE, element)
+            self.assertTrue(element in {"mxlsrc", "mxlsink"} or element in ELEMENT_PACKAGE, element)
         for runtime in ("python3-gi", "python3-numpy", "python3-opencv", "libcairo2",
                         "build-essential", "make"):
             self.assertIn(runtime, self.dockerfile)

@@ -1,0 +1,6 @@
+ARG OPERATOR_BASE=mxl-operator-suite:online-demo-base
+FROM ${OPERATOR_BASE}
+
+COPY processing/layout-compositor/layout_compositor.py /opt/mxl-operator/layout_compositor.py
+COPY processing/layout-compositor/bank_client.py /opt/mxl-operator/layout_bank_client.py
+RUN chmod 0755 /opt/mxl-operator/layout_bank_client.py

@@ -35,16 +35,16 @@ Produce a guarded ZoomISO Cloud → MXL Core demonstration with:
   container label, not the name; `stop` refuses a same-named container without it.
 - Demo containers have no restart policy. After a reboot or VM power-up they stay
   down until an operator relaunches against freshly discovered flows.
-- Do not enable the Skin's ME/SuperSource controls until their compositor is a
-  versioned, portable package. Direct Cut, Preview, and Take are the supported
-  controls in this bundle.
+- The Skin's ME controls may use only the versioned `processing/layout-compositor`
+  package. Build a scene on the off-air bank, verify Preview, then Take; never
+  rebuild the on-air bank.
 - If source flows rotate, stop the demo bundle, remap/confirm ZoomISO, and
   relaunch. Never hard-code discovered flow UUIDs.
 - Treat a metered cloud VM as billable until its provider reports deallocated.
 
 ## Acceptance before calling a run successful
 
-1. `./mxl-demo status` reports all seven owned containers running with zero
+1. `./mxl-demo status` reports all nine owned containers running with zero
    restarts and all three control endpoints reachable.
 2. Program, Preview, and the multiview wall visibly advance.
 3. The YouTube controller's sustained gate in `outputs/rtmp/README.md` passes.

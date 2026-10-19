@@ -96,7 +96,8 @@ public meeting for confidential material.
 
 `up` reruns the preflight, obtains the pinned Core revision, builds the required
 local images, discovers only live paired ZoomISO outputs, writes private runtime
-configuration, and starts the seven labelled services. It stops on the first
+configuration, and starts the nine labelled services, including two warm
+off-air/on-air layout banks. It stops on the first
 failed prerequisite rather than leaving a partial deployment.
 
 `plan` also performs fresh source discovery every time. It never reuses a

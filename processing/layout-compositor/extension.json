@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "name": "mxl-layout-compositor",
+  "version": "0.1.0",
+  "kind": "processor",
+  "maturity": "prototype",
+  "requires_core_api": "^1.0",
+  "entrypoint": "scene_supervisor.py",
+  "capabilities": [
+    "mxl.video.read",
+    "mxl.video.publish",
+    "layout.scene.prepare",
+    "layout.bank.off_air",
+    "health.publish"
+  ],
+  "flow_roles": {
+    "reads": ["source.video"],
+    "publishes": ["scene.video"]
+  },
+  "health": {
+    "state_path": "/api/v1/state",
+    "liveness_path": "/api/v1/health/live",
+    "readiness_path": "/api/v1/health/ready",
+    "bind_scope": "loopback"
+  },
+  "external_dependencies": [
+    "GStreamer 1.24+",
+    "gst-mxl-rs mxlsrc and mxlsink"
+  ],
+  "secret_refs": []
+}
