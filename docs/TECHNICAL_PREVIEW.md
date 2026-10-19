@@ -49,6 +49,17 @@ Core hard-counter movement. The NDI bank peaked below two CPU cores and retained
 more than 88 percent whole-host idle on the tested 16-vCPU receiver. This is a
 specific two-source video result, not a universal NDI-versus-MXL benchmark.
 
+## Public proof images
+
+The repository includes public-safe proof from the accepted demonstration. The
+source canvas intentionally obscures participant imagery while preserving the
+eight-live-source topology; the controller image exposes aggregate media and
+resource telemetry without a stream key.
+
+![Public-safe eight-source ZoomISO MXL canvas](assets/zoomiso-mxl-eight-source-public-proof.jpg)
+
+![Live 4K YouTube controller with all gates passing](assets/youtube-4k-control-live-final.jpg)
+
 ## Explicit limitations
 
 The following remain experimental and are not part of the supported technical
