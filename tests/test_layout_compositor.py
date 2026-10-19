@@ -50,6 +50,7 @@ class LayoutCompositorTests(unittest.TestCase):
         args = argparse.Namespace(
             domain="/mxl-domain", input=["one", "two", "three"], output_flow_id="scene",
             output_label="scene", width=1920, height=1080, rate="30000/1001",
+            pixel_path="direct-v210",
         )
         value = layout.pipeline_description(args)
         self.assertEqual(value.count("mxlsrc "), 3)
@@ -60,6 +61,26 @@ class LayoutCompositorTests(unittest.TestCase):
         self.assertIn("sink_1::xpos=1280", value)
         self.assertIn("sink_0::sizing-policy=keep-aspect-ratio", value)
         self.assertNotIn("videoconvert", value)
+
+    def test_bgra_candidate_matches_the_proven_youtube_scaling_shape(self):
+        args = argparse.Namespace(
+            domain="/mxl-domain", input=["one"] * 8, output_flow_id="scene",
+            output_label="scene", width=1920, height=1080, rate="30/1",
+            pixel_path="bgra",
+        )
+        value = layout.pipeline_description(args)
+        self.assertEqual(value.count("videoscale method=0 add-borders=false"), 8)
+        self.assertEqual(value.count("videoconvert n-threads=2"), 8)
+        self.assertIn("video/x-raw,format=BGRA,width=1920,height=1080", value)
+        self.assertIn("videoconvert n-threads=8", value)
+        self.assertIn("video/x-raw,format=v210,width=1920,height=1080", value)
+
+    def test_bgra_is_the_production_default(self):
+        args = layout.parser().parse_args([
+            "--domain", "/mxl-domain", "--input", "one", "--input", "two",
+            "--output-flow-id", "scene",
+        ])
+        self.assertEqual(args.pixel_path, "bgra")
 
     def test_supervisor_readiness_requires_cadence_and_every_input(self):
         sys.path.insert(0, str(MODULE_DIR))

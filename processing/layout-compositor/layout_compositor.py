@@ -80,6 +80,12 @@ def pipeline_description(args: argparse.Namespace) -> str:
             f"sink_{index}::zorder={index + 1}",
             f"sink_{index}::sizing-policy=keep-aspect-ratio",
         ])
+    if args.pixel_path == "bgra":
+        parts.extend([
+            f"! video/x-raw,format=BGRA,width={args.width},height={args.height},"
+            f"pixel-aspect-ratio=1/1,framerate={args.rate},interlace-mode=progressive",
+            "! videoconvert n-threads=8",
+        ])
     parts.extend([
         f"! video/x-raw,format=v210,width={args.width},height={args.height},"
         f"pixel-aspect-ratio=1/1,framerate={args.rate},interlace-mode=progressive,colorimetry=bt709",
@@ -90,13 +96,23 @@ def pipeline_description(args: argparse.Namespace) -> str:
         f"! mxlsink flow-id={args.output_flow_id} domain={args.domain}",
     ])
     for index, (flow_id, tile) in enumerate(zip(args.input, tiles, strict=True)):
-        parts.extend([
+        branch = [
             f"mxlsrc domain={args.domain} video-flow-id={flow_id} automatic-eos=false",
             "! queue max-size-buffers=3 max-size-time=0 max-size-bytes=0 leaky=downstream",
             f"! identity name=input_{index} silent=true",
+        ]
+        if args.pixel_path == "bgra":
+            branch.extend([
+                "! videoscale method=0 add-borders=false",
+                f"! video/x-raw,width={tile.width},height={tile.height},framerate={args.rate}",
+                "! videoconvert n-threads=2",
+                f"! video/x-raw,format=BGRA,width={tile.width},height={tile.height},framerate={args.rate}",
+            ])
+        branch.extend([
             "! queue max-size-buffers=2 max-size-time=0 max-size-bytes=0 leaky=downstream",
             f"! mix.sink_{index}",
         ])
+        parts.extend(branch)
     return " ".join(parts)
 
 
@@ -166,8 +182,10 @@ class Compositor:
                 )
                 if message:
                     if message.type == self.Gst.MessageType.ERROR:
-                        error, _debug = message.parse_error()
-                        print(json.dumps({"event": "fatal", "reason": str(error)}), flush=True)
+                        error, debug = message.parse_error()
+                        print(json.dumps({
+                            "event": "fatal", "reason": str(error), "debug": debug or "",
+                        }), flush=True)
                     else:
                         print(json.dumps({"event": "output_eos"}), flush=True)
                     return 2
@@ -186,6 +204,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--width", type=int, default=1920)
     result.add_argument("--height", type=int, default=1080)
     result.add_argument("--rate", default="30000/1001")
+    result.add_argument("--pixel-path", choices=("direct-v210", "bgra"), default="bgra")
     result.add_argument("--health-interval", type=float, default=0.5)
     return result
 
