@@ -50,6 +50,8 @@ class LayoutCompositorTests(unittest.TestCase):
         self.assertIn("clocksync sync-to-first=false", value)
         self.assertIn("sink_0::width=1280", value)
         self.assertIn("sink_1::xpos=1280", value)
+        self.assertIn("sink_0::sizing-policy=keep-aspect-ratio", value)
+        self.assertNotIn("videoconvert", value)
 
     def test_bank_client_is_loopback_only_and_posts_exact_scene(self):
         sys.path.insert(0, str(MODULE_DIR))

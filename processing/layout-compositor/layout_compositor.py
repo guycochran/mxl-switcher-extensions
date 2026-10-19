@@ -69,10 +69,9 @@ def pipeline_description(args: argparse.Namespace) -> str:
             f"sink_{index}::xpos={tile.x}", f"sink_{index}::ypos={tile.y}",
             f"sink_{index}::width={tile.width}", f"sink_{index}::height={tile.height}",
             f"sink_{index}::zorder={index + 1}",
+            f"sink_{index}::sizing-policy=keep-aspect-ratio",
         ])
     parts.extend([
-        f"! video/x-raw,format=BGRA,width={args.width},height={args.height},framerate={args.rate}",
-        "! videoconvert n-threads=8",
         f"! video/x-raw,format=v210,width={args.width},height={args.height},"
         f"pixel-aspect-ratio=1/1,framerate={args.rate},interlace-mode=progressive,colorimetry=bt709",
         "! queue max-size-buffers=4 max-size-time=0 max-size-bytes=0",
@@ -85,10 +84,6 @@ def pipeline_description(args: argparse.Namespace) -> str:
         parts.extend([
             f"mxlsrc domain={args.domain} video-flow-id={flow_id} automatic-eos=false",
             "! queue max-size-buffers=3 max-size-time=0 max-size-bytes=0 leaky=downstream",
-            "! videoconvert n-threads=2",
-            f"! video/x-raw,format=BGRA,framerate={args.rate}",
-            "! videoscale method=1 add-borders=true",
-            f"! video/x-raw,format=BGRA,width={tile.width},height={tile.height},framerate={args.rate}",
             f"! identity name=input_{index} silent=true",
             "! queue max-size-buffers=2 max-size-time=0 max-size-bytes=0 leaky=downstream",
             f"! mix.sink_{index}",
