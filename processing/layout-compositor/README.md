@@ -65,5 +65,22 @@ held 29.99 fps at about 2.37 cores and 206 MiB RSS, reducing measured CPU by
 about 47%. With BGRA limited to four cores, every preset from 2-up through 8-up
 held 29.99 fps; measured use ranged from about 1.62 to 3.03 cores. Two
 simultaneous warm 8-up banks also held 29.99 fps each under their four-core
-limits. This is strong processor-path evidence, not a substitute for the final
-eight-distinct-source Core hard-counter and output-quality gate.
+limits.
+
+The follow-up live qualification used eight distinct ZoomISO MXL video flows on
+the same CPU-only reference host. Every preset from 2-up through 7-up held
+approximately 29.6--29.8 fps. An initial 8-up attempt exposed a cold/transient
+pause, so the decisive runs excluded the first ten seconds rather than hiding
+it in a whole-run average. The four-core 8-up bank then sustained 29.985 fps;
+raising its limit to six cores produced essentially the same 29.967 fps. Two
+four-core 8-up banks running together sustained 29.32 and 29.74 fps, with all
+eight inputs advancing in both banks. The banks generally used about 3.1--3.6
+logical CPUs and roughly 0.41--0.44 GiB RSS apiece during that dual-bank run.
+
+A separate guarded 30-second Core acceptance window against the same eight
+live source pairs passed: Program, Preview, and the eight-source confidence
+wall all advanced; no owned service restarted; all Core hard counters stayed
+zero and unchanged; and the YouTube controller detected eight video plus eight
+audio sources ready for an operator destination. These are bounded live-source
+and control-path results. They do not replace an audience-observed long-run A/V
+sync or transmitted-program quality gate.

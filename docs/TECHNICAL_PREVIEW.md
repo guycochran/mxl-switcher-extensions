@@ -37,8 +37,8 @@ but is not a supported eight-source 1080p30 baseline.
 | Capability | Evidence-backed status |
 | --- | --- |
 | ZoomISO MXL contribution | Eight paired source video/audio flows discovered and operated through the guarded bundle |
-| Core routing | Stable Program and Preview identities, operator Preview/Take, zero hard-counter movement in the published caveat-zero rehearsal |
-| Operator confidence | Advancing Program, Preview, and one eight-source multiview wall with an ATEM-style browser Skin |
+| Core routing | Stable Program and Preview identities, operator Preview/Take, and zero hard-counter movement in both the published caveat-zero rehearsal and a later eight-distinct-source live acceptance window |
+| Operator confidence | Advancing Program, Preview, one eight-source multiview wall, and warm 2-up through 8-up MXL layout banks with an ATEM-style browser Skin |
 | YouTube output | CPU-only 3840x2160p30 eight-source composition, Program audio, diagnostic timecode, and RTMPS delivery demonstrated on a modern 32-vCPU cloud host |
 | NDI input | Experimental two-source, video-only split-copy path passed strict 60-second and 180-second clean-host gates on a modern 16-vCPU receiver using two full-bandwidth ZoomISO NDI outputs over a private network |
 | Portability | Azure is the demonstrated CPU reference; comparable Google Cloud and AWS machines are candidates until independently qualified |
@@ -52,6 +52,18 @@ HX2/HX3 PTZ senders exercised on the shared older lab host did not meet the
 strict no-skip gate. That result combined decode and host contention and does
 not isolate the codec, so those senders and that host profile remain
 unqualified.
+
+The portable layout compositor was also qualified with eight distinct live
+ZoomISO MXL sources on the 32-vCPU reference. Each 2-up through 7-up preset ran
+near 29.6--29.8 fps under a four-core bank limit. After an explicit ten-second
+warm-up, 8-up sustained 29.985 fps at four cores; a six-core control did not
+materially improve that rate. Two four-core 8-up banks then ran together at
+29.32 and 29.74 fps with every source advancing. A separate 30-second guarded
+Core acceptance window passed with all hard counters zero and unchanged,
+advancing Program/Preview/multiview confidence paths, zero missing or terminal
+torn reads, and zero encoder restarts. The observed startup pause in the first
+8-up attempt remains visible in the qualification record; readiness decisions
+must use a warm observation window rather than a single immediate sample.
 
 ## Public proof images
 
